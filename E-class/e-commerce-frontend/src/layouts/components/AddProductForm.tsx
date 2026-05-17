@@ -8,6 +8,7 @@ import {
   Form,
   Input,
   InputNumber,
+  Modal,
   Row,
   Select,
   Space,
@@ -17,8 +18,25 @@ import {
 } from "antd";
 import { PlusOutlined } from "@ant-design/icons";
 import { productService } from "@/services/product.service";
+import { attributeValueService } from "@/services/attributeValue.service";
 
 const { TextArea } = Input;
+
+const sectionCardStyle = {
+  borderRadius: 12,
+  border: "1px solid #edf0f5",
+  background: "#ffffff",
+  marginBottom: 18,
+};
+
+const compactFormItemStyle = {
+  marginBottom: 14,
+};
+
+const sectionTitleStyle = {
+  fontWeight: 700,
+  color: "#1f2937",
+};
 
 interface SelectOption {
   label: string;
@@ -37,6 +55,7 @@ interface VariantItem {
   stock_quantity: number;
   is_active: boolean;
 }
+type QuickAttributeCode = "COLOR" | "SIZE";
 
 interface AddProductFormProps {
   onFinish: (values: any) => void;
@@ -56,6 +75,12 @@ const AddProductForm = ({ onFinish, onCancel }: AddProductFormProps) => {
 
   const [loading, setLoading] = useState(false);
   const [variantRows, setVariantRows] = useState<VariantItem[]>([]);
+
+  const [quickAttributeOpen, setQuickAttributeOpen] = useState(false);
+  const [quickAttributeCode, setQuickAttributeCode] =
+    useState<QuickAttributeCode>("COLOR");
+  const [quickAttributeValue, setQuickAttributeValue] = useState("");
+  const [quickAttributeSaving, setQuickAttributeSaving] = useState(false);
 
   const [quickCostPrice, setQuickCostPrice] = useState<number | null>(null);
   const [quickSellingPrice, setQuickSellingPrice] = useState<number | null>(
@@ -176,6 +201,35 @@ const AddProductForm = ({ onFinish, onCancel }: AddProductFormProps) => {
     return new Map(materials.map((item) => [item.value, item.label]));
   }, [materials]);
 
+  const getVariantKey = (
+    item: Pick<VariantItem, "color_id" | "size_id" | "material_id">,
+  ) => `${item.color_id}-${item.size_id}-${item.material_id}`;
+
+  const findDuplicateVariant = (items: VariantItem[]) => {
+    const seen = new Set<string>();
+
+    for (const item of items) {
+      const key = getVariantKey(item);
+
+      if (seen.has(key)) {
+        return item;
+      }
+
+      seen.add(key);
+    }
+
+    return null;
+  };
+
+  const hasSellingPriceLowerThanCostPrice = (items: VariantItem[]) => {
+    return items.find(
+      (item) =>
+        item.cost_price != null &&
+        item.selling_price != null &&
+        Number(item.selling_price) < Number(item.cost_price),
+    );
+  };
+
   const buildVariants = (
     colorIds: number[],
     sizeIds: number[],
@@ -220,6 +274,15 @@ const AddProductForm = ({ onFinish, onCancel }: AddProductFormProps) => {
       });
     });
 
+    const duplicateVariant = findDuplicateVariant(generated);
+
+    if (duplicateVariant) {
+      message.error(
+        `Biến thể bị trùng: ${duplicateVariant.color_name} / ${duplicateVariant.size_name} / ${duplicateVariant.material_name}`,
+      );
+      return 0;
+    }
+
     setVariantRows(generated);
     form.setFieldsValue({ variants: generated });
 
@@ -242,7 +305,9 @@ const AddProductForm = ({ onFinish, onCancel }: AddProductFormProps) => {
       selectedMaterialIds,
     );
 
-    message.success(`Đã tạo ${total} biến thể`);
+    if (total > 0) {
+      message.success(`Đã tạo ${total} biến thể`);
+    }
   };
 
   const handleQuickGenerateVariants = () => {
@@ -251,7 +316,9 @@ const AddProductForm = ({ onFinish, onCancel }: AddProductFormProps) => {
     const allMaterialIds = materials.map((item) => item.value);
 
     if (!allColorIds.length || !allSizeIds.length || !allMaterialIds.length) {
-      message.warning("Chưa có đủ dữ liệu màu, size hoặc chất liệu để tạo nhanh");
+      message.warning(
+        "Chưa có đủ dữ liệu màu, size hoặc chất liệu để tạo nhanh",
+      );
       return;
     }
 
@@ -263,7 +330,80 @@ const AddProductForm = ({ onFinish, onCancel }: AddProductFormProps) => {
 
     const total = buildVariants(allColorIds, allSizeIds, allMaterialIds);
 
-    message.success(`Đã tạo nhanh ${total} biến thể`);
+    if (total > 0) {
+      message.success(`Đã tạo nhanh ${total} biến thể`);
+    }
+  };
+
+  const openQuickAttributeModal = (code: QuickAttributeCode) => {
+    setQuickAttributeCode(code);
+    setQuickAttributeValue("");
+    setQuickAttributeOpen(true);
+  };
+
+  const closeQuickAttributeModal = () => {
+    setQuickAttributeOpen(false);
+    setQuickAttributeValue("");
+  };
+
+  const handleQuickCreateAttributeValue = async () => {
+    const value = quickAttributeValue.trim();
+
+    if (!value) {
+      message.warning(
+        quickAttributeCode === "COLOR"
+          ? "Vui lòng nhập tên màu"
+          : "Vui lòng nhập size",
+      );
+      return;
+    }
+
+    try {
+      setQuickAttributeSaving(true);
+
+      const created = await attributeValueService.createByCode(
+        quickAttributeCode,
+        { value },
+      );
+
+      const newOption = {
+        label: created.value,
+        value: created.id,
+      };
+
+      if (quickAttributeCode === "COLOR") {
+        setColors((prev) => [...prev, newOption]);
+
+        const current = form.getFieldValue("selected_color_ids") || [];
+        form.setFieldValue("selected_color_ids", [
+          ...new Set([...current, created.id]),
+        ]);
+
+        message.success(`Đã thêm màu ${created.value}`);
+      }
+
+      if (quickAttributeCode === "SIZE") {
+        setSizes((prev) => [...prev, newOption]);
+
+        const current = form.getFieldValue("selected_size_ids") || [];
+        form.setFieldValue("selected_size_ids", [
+          ...new Set([...current, created.id]),
+        ]);
+
+        message.success(`Đã thêm size ${created.value}`);
+      }
+
+      closeQuickAttributeModal();
+    } catch (error: any) {
+      message.error(
+        error?.response?.data?.message ||
+          (quickAttributeCode === "COLOR"
+            ? "Thêm màu thất bại"
+            : "Thêm size thất bại"),
+      );
+    } finally {
+      setQuickAttributeSaving(false);
+    }
   };
 
   const handleQuickApplyVariantValues = () => {
@@ -285,7 +425,10 @@ const AddProductForm = ({ onFinish, onCancel }: AddProductFormProps) => {
       message.warning("Giá nhập, giá bán và tồn kho không được nhỏ hơn 0");
       return;
     }
-
+    if (quickSellingPrice < quickCostPrice) {
+      message.error("Giá bán chung không được nhỏ hơn giá nhập chung");
+      return;
+    }
     const next = variantRows.map((item) => ({
       ...item,
       cost_price: quickCostPrice,
@@ -309,6 +452,28 @@ const AddProductForm = ({ onFinish, onCancel }: AddProductFormProps) => {
       ...next[index],
       [field]: value,
     };
+
+    const currentVariant = next[index];
+
+    if (
+      currentVariant.cost_price != null &&
+      currentVariant.selling_price != null &&
+      Number(currentVariant.selling_price) < Number(currentVariant.cost_price)
+    ) {
+      message.warning(
+        `Giá bán của biến thể ${currentVariant.color_name} / ${currentVariant.size_name} / ${currentVariant.material_name} đang nhỏ hơn giá nhập`,
+      );
+    }
+
+    const duplicateVariant = findDuplicateVariant(next);
+
+    if (duplicateVariant) {
+      message.error(
+        `Biến thể bị trùng: ${duplicateVariant.color_name} / ${duplicateVariant.size_name} / ${duplicateVariant.material_name}`,
+      );
+      return;
+    }
+
     setVariantRows(next);
     form.setFieldsValue({ variants: next });
   };
@@ -341,7 +506,27 @@ const AddProductForm = ({ onFinish, onCancel }: AddProductFormProps) => {
     );
 
     if (hasInvalidPrice) {
-      message.error("Vui lòng nhập đầy đủ giá nhập và giá bán cho tất cả biến thể");
+      message.error(
+        "Vui lòng nhập đầy đủ giá nhập và giá bán cho tất cả biến thể",
+      );
+      return;
+    }
+
+    const duplicateVariant = findDuplicateVariant(variantRows);
+
+    if (duplicateVariant) {
+      message.error(
+        `Không thể lưu vì trùng biến thể: ${duplicateVariant.color_name} / ${duplicateVariant.size_name} / ${duplicateVariant.material_name}`,
+      );
+      return;
+    }
+
+    const invalidProfitVariant = hasSellingPriceLowerThanCostPrice(variantRows);
+
+    if (invalidProfitVariant) {
+      message.error(
+        `Không thể lưu vì giá bán nhỏ hơn giá nhập ở biến thể: ${invalidProfitVariant.color_name} / ${invalidProfitVariant.size_name} / ${invalidProfitVariant.material_name}`,
+      );
       return;
     }
 
@@ -361,203 +546,275 @@ const AddProductForm = ({ onFinish, onCancel }: AddProductFormProps) => {
         variants: [],
       }}
     >
-      <Divider orientation="left">Thông tin chung</Divider>
-
-      <Row gutter={16}>
-        <Col span={12}>
-          <Form.Item
-            name="name"
-            label="Tên sản phẩm"
-            rules={[{ required: true, message: "Vui lòng nhập tên sản phẩm" }]}
-          >
-            <Input placeholder="VD: Nike Air Force 1 '07" />
-          </Form.Item>
-        </Col>
-
-        <Col span={12}>
-          <Form.Item
-            name="code"
-            label="Mã sản phẩm"
-            rules={[
-              { required: true, message: "Mã sản phẩm đang được tự sinh" },
-            ]}
-          >
-            <Input placeholder="Mã sản phẩm tự sinh" readOnly />
-          </Form.Item>
-        </Col>
-      </Row>
-
-      <Row gutter={16}>
-        <Col span={6}>
-          <Form.Item
-            name="brand_id"
-            label="Thương hiệu"
-            rules={[{ required: true, message: "Vui lòng chọn thương hiệu" }]}
-          >
-            <Select
-              placeholder="Chọn thương hiệu"
-              options={brands}
-              loading={loading}
-            />
-          </Form.Item>
-        </Col>
-
-        <Col span={6}>
-          <Form.Item
-            name="category_id"
-            label="Danh mục"
-            rules={[{ required: true, message: "Vui lòng chọn danh mục" }]}
-          >
-            <Select
-              placeholder="Chọn danh mục"
-              options={categories}
-              loading={loading}
-            />
-          </Form.Item>
-        </Col>
-
-        <Col span={6}>
-          <Form.Item
-            name="origin_id"
-            label="Xuất xứ"
-            rules={[{ required: true, message: "Vui lòng chọn xuất xứ" }]}
-          >
-            <Select
-              placeholder="Chọn xuất xứ"
-              options={origins}
-              loading={loading}
-            />
-          </Form.Item>
-        </Col>
-
-        <Col span={6}>
-          <Form.Item
-            name="supplier_id"
-            label="Nhà cung cấp"
-            rules={[{ required: true, message: "Vui lòng chọn nhà cung cấp" }]}
-          >
-            <Select
-              placeholder="Chọn nhà cung cấp"
-              options={suppliers}
-              loading={loading}
-            />
-          </Form.Item>
-        </Col>
-      </Row>
-
-      <Form.Item name="description" label="Mô tả sản phẩm">
-        <TextArea
-          rows={4}
-          placeholder="Mô tả chi tiết, câu chuyện sản phẩm..."
-        />
-      </Form.Item>
-
-      <Form.Item
-        name="images"
-        label="Ảnh sản phẩm"
-        valuePropName="fileList"
-        getValueFromEvent={(e) => (Array.isArray(e) ? e : e?.fileList)}
+      <Card
+        size="small"
+        style={sectionCardStyle}
+        title={<span style={sectionTitleStyle}>Thông tin chung</span>}
       >
-        <Upload.Dragger
-          name="files"
-          listType="picture-card"
-          beforeUpload={() => false}
-          multiple
-          maxCount={5}
-        >
-          <p className="ant-upload-drag-icon">
-            <PlusOutlined />
-          </p>
-          <p className="ant-upload-text">Kéo & thả hoặc nhấn để chọn ảnh</p>
-          <p style={{ fontSize: 12, color: "#999" }}>
-            Ảnh đầu tiên sẽ là ảnh chính của sản phẩm
-          </p>
-        </Upload.Dragger>
-      </Form.Item>
+        <Row gutter={16}>
+          <Col xs={24} md={12}>
+            <Form.Item
+              name="name"
+              label="Tên sản phẩm"
+              style={compactFormItemStyle}
+              rules={[
+                { required: true, message: "Vui lòng nhập tên sản phẩm" },
+              ]}
+            >
+              <Input placeholder="VD: Nike Air Force 1 '07" />
+            </Form.Item>
+          </Col>
 
-      <Form.Item
-        name="is_active"
-        label="Trạng thái hoạt động"
-        valuePropName="checked"
-      >
-        <Switch />
-      </Form.Item>
+          <Col xs={24} md={12}>
+            <Form.Item
+              name="code"
+              label="Mã sản phẩm"
+              style={compactFormItemStyle}
+              rules={[
+                { required: true, message: "Mã sản phẩm đang được tự sinh" },
+              ]}
+            >
+              <Input placeholder="Mã sản phẩm tự sinh" readOnly />
+            </Form.Item>
+          </Col>
+        </Row>
 
-      <Divider orientation="left">Thiết lập biến thể</Divider>
-
-      <Row gutter={16}>
-        <Col span={7}>
-          <Form.Item
-            name="selected_color_ids"
-            label="Chọn màu"
-            rules={[{ required: true, message: "Vui lòng chọn ít nhất 1 màu" }]}
-          >
-            <Select
-              mode="multiple"
-              placeholder="Chọn các màu"
-              options={colors}
-              loading={loading}
-              optionFilterProp="label"
-            />
-          </Form.Item>
-        </Col>
-
-        <Col span={7}>
-          <Form.Item
-            name="selected_size_ids"
-            label="Chọn size"
-            rules={[
-              { required: true, message: "Vui lòng chọn ít nhất 1 size" },
-            ]}
-          >
-            <Select
-              mode="multiple"
-              placeholder="Chọn các size"
-              options={sizes}
-              loading={loading}
-              optionFilterProp="label"
-            />
-          </Form.Item>
-        </Col>
-
-        <Col span={6}>
-          <Form.Item
-            name="selected_material_ids"
-            label="Chọn chất liệu"
-            rules={[
-              { required: true, message: "Vui lòng chọn ít nhất 1 chất liệu" },
-            ]}
-          >
-            <Select
-              mode="multiple"
-              placeholder="Chọn các chất liệu"
-              options={materials}
-              loading={loading}
-              optionFilterProp="label"
-            />
-          </Form.Item>
-        </Col>
-
-        <Col span={4}>
-          <Form.Item label=" ">
-            <Space direction="vertical" style={{ width: "100%" }}>
-              <Button
-                type="primary"
-                block
-                onClick={handleQuickGenerateVariants}
+        <Row gutter={16}>
+          <Col xs={24} md={6}>
+            <Form.Item
+              name="brand_id"
+              label="Thương hiệu"
+              style={compactFormItemStyle}
+              rules={[{ required: true, message: "Vui lòng chọn thương hiệu" }]}
+            >
+              <Select
+                placeholder="Chọn thương hiệu"
+                options={brands}
                 loading={loading}
-              >
-                Tạo nhanh biến thể
-              </Button>
+                optionFilterProp="label"
+                showSearch
+              />
+            </Form.Item>
+          </Col>
 
-              <Button type="dashed" block onClick={handleGenerateVariants}>
-                Tạo biến thể
-              </Button>
-            </Space>
-          </Form.Item>
-        </Col>
-      </Row>
+          <Col xs={24} md={6}>
+            <Form.Item
+              name="category_id"
+              label="Danh mục"
+              style={compactFormItemStyle}
+              rules={[{ required: true, message: "Vui lòng chọn danh mục" }]}
+            >
+              <Select
+                placeholder="Chọn danh mục"
+                options={categories}
+                loading={loading}
+                optionFilterProp="label"
+                showSearch
+              />
+            </Form.Item>
+          </Col>
 
+          <Col xs={24} md={6}>
+            <Form.Item
+              name="origin_id"
+              label="Xuất xứ"
+              style={compactFormItemStyle}
+              rules={[{ required: true, message: "Vui lòng chọn xuất xứ" }]}
+            >
+              <Select
+                placeholder="Chọn xuất xứ"
+                options={origins}
+                loading={loading}
+                optionFilterProp="label"
+                showSearch
+              />
+            </Form.Item>
+          </Col>
+
+          <Col xs={24} md={6}>
+            <Form.Item
+              name="supplier_id"
+              label="Nhà cung cấp"
+              style={compactFormItemStyle}
+              rules={[
+                { required: true, message: "Vui lòng chọn nhà cung cấp" },
+              ]}
+            >
+              <Select
+                placeholder="Chọn nhà cung cấp"
+                options={suppliers}
+                loading={loading}
+                optionFilterProp="label"
+                showSearch
+              />
+            </Form.Item>
+          </Col>
+        </Row>
+
+        <Row gutter={16} align="middle">
+          <Col xs={24} md={12}>
+            <Form.Item
+              name="selected_material_ids"
+              label="Chất liệu"
+              style={compactFormItemStyle}
+              rules={[
+                {
+                  required: true,
+                  message: "Vui lòng chọn ít nhất 1 chất liệu",
+                },
+              ]}
+            >
+              <Select
+                mode="multiple"
+                placeholder="Chọn chất liệu sản phẩm"
+                options={materials}
+                loading={loading}
+                optionFilterProp="label"
+                showSearch
+              />
+            </Form.Item>
+          </Col>
+
+          <Col xs={24} md={12}>
+            <Form.Item
+              name="is_active"
+              label="Trạng thái hoạt động"
+              valuePropName="checked"
+              style={compactFormItemStyle}
+            >
+              <Switch
+                checkedChildren="Đang bán"
+                unCheckedChildren="Ngừng bán"
+              />
+            </Form.Item>
+          </Col>
+        </Row>
+
+        <Form.Item
+          name="description"
+          label="Mô tả sản phẩm"
+          style={compactFormItemStyle}
+        >
+          <TextArea
+            rows={4}
+            placeholder="Mô tả chi tiết, câu chuyện sản phẩm..."
+          />
+        </Form.Item>
+
+        <Form.Item
+          name="images"
+          label="Ảnh sản phẩm"
+          valuePropName="fileList"
+          getValueFromEvent={(e) => (Array.isArray(e) ? e : e?.fileList)}
+          style={{ marginBottom: 0 }}
+        >
+          <Upload.Dragger
+            name="files"
+            listType="picture-card"
+            beforeUpload={() => false}
+            multiple
+            maxCount={5}
+          >
+            <p className="ant-upload-drag-icon">
+              <PlusOutlined />
+            </p>
+            <p className="ant-upload-text">Kéo & thả hoặc nhấn để chọn ảnh</p>
+            <p style={{ fontSize: 12, color: "#999" }}>
+              Ảnh đầu tiên sẽ là ảnh chính của sản phẩm
+            </p>
+          </Upload.Dragger>
+        </Form.Item>
+      </Card>
+      <Card
+        size="small"
+        style={sectionCardStyle}
+        title={<span style={sectionTitleStyle}>Thiết lập biến thể</span>}
+      >
+        <Row gutter={16} align="bottom">
+          <Col xs={24} md={10}>
+            <Form.Item
+              name="selected_color_ids"
+              label={
+                <Space>
+                  <span>Chọn màu</span>
+                  <Button
+                    size="small"
+                    type="link"
+                    icon={<PlusOutlined />}
+                    onClick={() => openQuickAttributeModal("COLOR")}
+                  >
+                    Thêm màu
+                  </Button>
+                </Space>
+              }
+              style={compactFormItemStyle}
+              rules={[
+                { required: true, message: "Vui lòng chọn ít nhất 1 màu" },
+              ]}
+            >
+              <Select
+                mode="multiple"
+                placeholder="Chọn màu"
+                options={colors}
+                loading={loading}
+                optionFilterProp="label"
+                showSearch
+              />
+            </Form.Item>
+          </Col>
+
+          <Col xs={24} md={10}>
+            <Form.Item
+              name="selected_size_ids"
+              label={
+                <Space>
+                  <span>Chọn size</span>
+                  <Button
+                    size="small"
+                    type="link"
+                    icon={<PlusOutlined />}
+                    onClick={() => openQuickAttributeModal("SIZE")}
+                  >
+                    Thêm size
+                  </Button>
+                </Space>
+              }
+              style={compactFormItemStyle}
+              rules={[
+                { required: true, message: "Vui lòng chọn ít nhất 1 size" },
+              ]}
+            >
+              <Select
+                mode="multiple"
+                placeholder="Chọn size"
+                options={sizes}
+                loading={loading}
+                optionFilterProp="label"
+                showSearch
+              />
+            </Form.Item>
+          </Col>
+
+          <Col xs={24} md={4}>
+            <Form.Item label=" " style={compactFormItemStyle}>
+              <Space direction="vertical" style={{ width: "100%" }} size={8}>
+                <Button
+                  type="primary"
+                  block
+                  onClick={handleQuickGenerateVariants}
+                  loading={loading}
+                >
+                  Tạo nhanh
+                </Button>
+
+                <Button type="dashed" block onClick={handleGenerateVariants}>
+                  Tạo biến thể
+                </Button>
+              </Space>
+            </Form.Item>
+          </Col>
+        </Row>
+      </Card>
       <Form.Item name="variants" hidden>
         <Input />
       </Form.Item>
@@ -707,7 +964,37 @@ const AddProductForm = ({ onFinish, onCancel }: AddProductFormProps) => {
           ))}
         </Space>
       )}
-
+      <Modal
+        open={quickAttributeOpen}
+        title={
+          quickAttributeCode === "COLOR" ? "Thêm nhanh màu" : "Thêm nhanh size"
+        }
+        onCancel={closeQuickAttributeModal}
+        onOk={handleQuickCreateAttributeValue}
+        confirmLoading={quickAttributeSaving}
+        okText="Thêm"
+        cancelText="Hủy"
+        destroyOnClose
+      >
+        <Form layout="vertical">
+          <Form.Item
+            label={quickAttributeCode === "COLOR" ? "Tên màu" : "Size"}
+            required
+          >
+            <Input
+              placeholder={
+                quickAttributeCode === "COLOR"
+                  ? "VD: Xanh navy, Kem, Be..."
+                  : "VD: 39, 40, 41, 42..."
+              }
+              value={quickAttributeValue}
+              onChange={(e) => setQuickAttributeValue(e.target.value)}
+              onPressEnter={handleQuickCreateAttributeValue}
+              autoFocus
+            />
+          </Form.Item>
+        </Form>
+      </Modal>
       <Row justify="end" style={{ marginTop: 24 }}>
         <Space>
           <Button onClick={onCancel}>Hủy</Button>
