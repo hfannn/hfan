@@ -23,13 +23,14 @@ import {
 } from "antd";
 import {
   ArrowLeftOutlined,
+  CloseOutlined,
   CreditCardOutlined,
   EditOutlined,
+  TagsOutlined,
   TruckOutlined,
 } from "@ant-design/icons";
 import { orderService } from "@/services/order.service";
 import { useAuth } from "@/services/AuthContext";
-import { discountService } from "@/services/discount.service";
 import { checkoutService, CheckoutQuoteResponse } from "@/services/checkout.service";
 import { userService } from "@/services/userService";
 import { couponService } from "@/services/coupon.service";
@@ -115,28 +116,51 @@ const CheckoutPage = () => {
 
   const fallbackItems = useMemo(
     () =>
-      items.map((item: any) => ({
-        productId: item.productId,
-        variantId: item.variantId,
-        productName: item.productName || item.name,
-        variantCode: item.variantCode,
-        size: item.size,
-        color: item.color,
-        material: item.material,
-        imageUrl: item.image || item.imageUrl,
-        quantity: item.quantity,
-        originalPrice: Number(item.originalPrice ?? item.price ?? item.unitPrice ?? 0),
-        unitPrice: Number(item.unitPrice ?? item.salePrice ?? item.price ?? 0),
-        discountPercent: Number(item.discountPercent ?? 0),
-        promotionId: item.promotionId,
-        lineTotal: Number(
-          item.lineTotal ??
-            item.subTotal ??
-            item.total ??
-            Number(item.quantity || 0) *
-              Number(item.unitPrice ?? item.salePrice ?? item.price ?? 0),
-        ),
-      })),
+      items.map((item: any) => {
+        const quantity = Number(item.quantity ?? item.qty ?? 1);
+        const unitPrice = Number(
+          item.saleUnitPrice ??
+            item.salePrice ??
+            item.discountedPrice ??
+            item.finalPrice ??
+            item.unitPrice ??
+            item.price ??
+            0,
+        );
+
+        return {
+          productId: item.productId,
+          variantId: item.variantId,
+          productName: item.productName || item.name,
+          variantCode: item.variantCode,
+          size: item.size,
+          color: item.color,
+          material: item.material,
+          imageUrl: item.image || item.imageUrl,
+          quantity,
+          originalPrice: Number(
+            item.originalUnitPrice ??
+              item.originalPrice ??
+              item.basePrice ??
+              item.priceBeforeDiscount ??
+              item.price ??
+              item.unitPrice ??
+              0,
+          ),
+          unitPrice,
+          discountPercent: Number(item.discountPercent ?? 0),
+          promotionId: item.promotionId,
+          lineTotal: Number(
+            item.lineTotal ??
+              item.totalPrice ??
+              item.itemTotal ??
+              item.amount ??
+              item.subTotal ??
+              item.total ??
+              unitPrice * quantity,
+          ),
+        };
+      }),
     [items],
   );
   const displayItems = quote?.items?.length ? quote.items : fallbackItems;
@@ -144,12 +168,30 @@ const CheckoutPage = () => {
     (sum: number, item: any) => sum + Number(item.lineTotal || 0),
     0,
   );
+  const fallbackOriginalSubtotal = fallbackItems.reduce(
+    (sum: number, item: any) =>
+      sum +
+      Number(item.originalPrice || item.unitPrice || 0) *
+        Number(item.quantity || 0),
+    0,
+  );
   const subtotalBeforeVoucher = Number(
     quote?.subtotalBeforeVoucher ?? fallbackSubtotal,
   );
-  const discount = appliedVoucher ? Number(quote?.voucherDiscountAmount || 0) : 0;
+  const originalSubtotal = Number(
+    quote?.originalSubtotal ?? fallbackOriginalSubtotal,
+  );
+  const productDiscountTotal = Number(
+    quote?.productDiscountTotal ??
+      Math.max(originalSubtotal - subtotalBeforeVoucher, 0),
+  );
+  const rawVoucherCode = String(quote?.voucherCode || appliedVoucher || "").trim();
+  const discount = Math.abs(Number(quote?.voucherDiscountAmount || 0) || 0);
+  const shouldShowVoucher = Boolean(rawVoucherCode) && discount > 0;
   const shippingFee = Number(quote?.shippingFee || 0);
-  const total = Math.max(subtotalBeforeVoucher - discount, 0) + shippingFee;
+  const total = Number(
+    quote?.finalTotal ?? Math.max(subtotalBeforeVoucher - discount, 0) + shippingFee,
+  );
   const isShippingLoading = quoteLoading;
   const defaultAddressStorageKey = useMemo(
     () => `checkout_default_address_${user?.userId || "guest"}`,
@@ -158,6 +200,52 @@ const CheckoutPage = () => {
 
   const formatMoney = (value?: number | string) =>
     `${new Intl.NumberFormat("vi-VN").format(Number(value || 0))} ₫`;
+
+  const clearAppliedVoucher = () => {
+    setVoucherCode("");
+    setAppliedVoucher(null);
+    setAppliedVoucherInfo(null);
+    setVoucherError("");
+  };
+
+  const getCheckoutItemPrice = (item: any) => {
+    const quantity = Number(item.quantity ?? item.qty ?? 1);
+    const unitPrice = Number(
+      item.saleUnitPrice ??
+        item.salePrice ??
+        item.discountedPrice ??
+        item.finalPrice ??
+        item.unitPrice ??
+        item.price ??
+        0,
+    );
+    const originalPrice = Number(
+      item.originalUnitPrice ??
+        item.originalPrice ??
+        item.basePrice ??
+        item.priceBeforeDiscount ??
+        item.price ??
+        item.unitPrice ??
+        0,
+    );
+    const lineTotal = Number(
+      item.lineTotal ??
+        item.totalPrice ??
+        item.itemTotal ??
+        item.amount ??
+        item.subTotal ??
+        item.total ??
+        unitPrice * quantity,
+    );
+
+    return {
+      quantity,
+      unitPrice,
+      originalPrice,
+      lineTotal,
+      hasProductDiscount: originalPrice > 0 && unitPrice > 0 && originalPrice > unitPrice,
+    };
+  };
 
   const buildVoucherLabel = (v: any) => {
     const discountText =
@@ -183,6 +271,9 @@ const CheckoutPage = () => {
 
     return `${v.code || v.name} - ${discountText}${minOrderText}${remainingText}`;
   };
+
+  const getVoucherInputValue = (voucher: any) =>
+    String(voucher?.code || voucher?.name || "").trim();
 
   const isVoucherRelatedError = (value?: string) => {
     const text = String(value || "")
@@ -216,7 +307,7 @@ const CheckoutPage = () => {
     ]);
 
     const hasShippingInfo =
-      values.address && values.provinceName && values.districtName;
+      values.address && values.districtId && values.wardCode;
 
     return {
       items: items.map((item: any) => ({
@@ -226,7 +317,7 @@ const CheckoutPage = () => {
       voucherCode: nextVoucherCode || undefined,
       shippingInfo: hasShippingInfo
         ? {
-            customerName: values.customerName || "Khach hang",
+            customerName: values.customerName || "Khách hàng",
             phone: values.phone || "0000000000",
             address: values.address,
             province: values.provinceName,
@@ -283,7 +374,7 @@ const CheckoutPage = () => {
     } catch (error: any) {
       const errorMessage =
         error?.response?.data?.message ||
-        "Khong the tinh lai tong tien don hang.";
+        "Không thể tính lại tổng tiền đơn hàng.";
 
       if (requestId === latestQuoteRequestRef.current) {
         if (options.source === "voucher") {
@@ -449,7 +540,6 @@ const CheckoutPage = () => {
     const fetchVouchers = async () => {
       try {
         let coupons: any[] = [];
-        let promotions: any[] = [];
 
         if (isAuthenticated) {
           const couponsRes = await couponService.getMyCoupons();
@@ -460,15 +550,7 @@ const CheckoutPage = () => {
             })) || [];
         }
 
-        const promotionRes = await discountService.getPublicPromotions();
-        const promotionList = promotionRes?.data?.content || promotionRes?.data || [];
-        promotions =
-          promotionList.map((promotion: any) => ({
-            ...promotion,
-            type: "PROMOTION",
-          })) || [];
-
-        setAvailableVouchers([...coupons, ...promotions]);
+        setAvailableVouchers(coupons);
       } catch (error) {
         console.error("Không thể tải danh sách voucher:", error);
         setAvailableVouchers([]);
@@ -682,7 +764,13 @@ const CheckoutPage = () => {
     });
   };
 
-  const handleApplyVoucher = async () => {
+  const handleApplyVoucher = async (event?: {
+    preventDefault?: () => void;
+    stopPropagation?: () => void;
+  }) => {
+    event?.preventDefault?.();
+    event?.stopPropagation?.();
+
     if (voucherApplying) {
       return;
     }
@@ -698,19 +786,6 @@ const CheckoutPage = () => {
         String(voucher.code || voucher.name || "").toLowerCase() ===
         normalizedVoucherCode.toLowerCase(),
     );
-    const minOrderValue = Number(voucherMeta?.minOrderValue ?? 0);
-
-    if (minOrderValue > 0 && subtotalBeforeVoucher < minOrderValue) {
-      const errorMessage = `Đơn hàng chưa đạt giá trị tối thiểu ${formatMoney(
-        minOrderValue,
-      )} để áp dụng voucher này.`;
-      setVoucherError(errorMessage);
-      setAppliedVoucher(null);
-      setAppliedVoucherInfo(null);
-      message.error(errorMessage);
-      return;
-    }
-
     const voucherRequestId = ++latestVoucherRequestRef.current;
 
     try {
@@ -763,7 +838,7 @@ const CheckoutPage = () => {
 
   const handlePlaceOrder = async (values: any) => {
     if (!quote) {
-      message.warning("Vui long doi he thong tinh lai tong tien don hang.");
+      message.warning("Vui lòng đợi hệ thống tính lại tổng tiền đơn hàng.");
       return;
     }
 
@@ -1102,91 +1177,7 @@ const CheckoutPage = () => {
             </Card>
 
             <Card
-              title="2. Mã giảm giá"
-              bordered={false}
-              style={{
-                marginTop: 24,
-                boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
-              }}
-            >
-              <Space.Compact style={{ width: "100%" }}>
-                <Select
-                  showSearch
-                  allowClear
-                  style={{ width: "100%" }}
-                  placeholder="Chọn hoặc nhập mã giảm giá"
-                  value={voucherCode || undefined}
-                  onSelect={(value) => setVoucherCode(value)}
-                  onSearch={(value) => setVoucherCode(value)}
-                  onChange={(value) => {
-                    const nextCode = value || "";
-                    setVoucherCode(nextCode);
-                    if (!nextCode) {
-                      setAppliedVoucher(null);
-                      setAppliedVoucherInfo(null);
-                      setVoucherError("");
-                      return;
-                    }
-
-                    if (
-                      appliedVoucher &&
-                      nextCode.toLowerCase() !== appliedVoucher.toLowerCase()
-                    ) {
-                      setAppliedVoucher(null);
-                      setAppliedVoucherInfo(null);
-                      setVoucherError("");
-                    }
-                  }}
-                  filterOption={(input, option) =>
-                    String(option?.label ?? "")
-                      .toLowerCase()
-                      .includes(input.toLowerCase())
-                  }
-                  options={availableVouchers.map((voucher) => ({
-                    label: buildVoucherLabel(voucher),
-                    value: voucher.code,
-                  }))}
-                  notFoundContent={
-                    isAuthenticated
-                      ? "Bạn không có mã giảm giá nào"
-                      : "Đăng nhập để xem mã giảm giá của bạn"
-                  }
-                />
-
-                <Button
-                  type="primary"
-                  onClick={handleApplyVoucher}
-                  loading={voucherApplying}
-                  disabled={voucherApplying || !!appliedVoucher || !voucherCode}
-                >
-                  Áp dụng
-                </Button>
-              </Space.Compact>
-
-              {voucherError && (
-                <div style={{ marginTop: 12 }}>
-                  <Text type="danger">{voucherError}</Text>
-                </div>
-              )}
-
-              {appliedVoucher && (
-                <div style={{ marginTop: 12 }}>
-                  <Text type="success">
-                    Đã áp dụng mã: <strong>{appliedVoucher}</strong>
-                  </Text>
-                  {appliedVoucherInfo && (
-                    <div style={{ marginTop: 8 }}>
-                      <Text type="secondary">
-                        {buildVoucherLabel(appliedVoucherInfo)}
-                      </Text>
-                    </div>
-                  )}
-                </div>
-              )}
-            </Card>
-
-            <Card
-              title="3. Phương thức thanh toán"
+              title="2. Phương thức thanh toán"
               bordered={false}
               style={{
                 marginTop: 24,
@@ -1238,14 +1229,19 @@ const CheckoutPage = () => {
 
           <Col xs={24} lg={10}>
             <Card
-              title={`Đơn hàng (${displayItems.length || items.length} sản phẩm)`}
               bordered={false}
               style={{
-                boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
+                borderRadius: 20,
+                boxShadow: "0 12px 32px rgba(15,23,42,0.10)",
                 position: "sticky",
                 top: 24,
               }}
+              styles={{ body: { padding: 24 } }}
             >
+              <Title level={4} style={{ marginTop: 0, marginBottom: 20 }}>
+                Đơn hàng của bạn ({displayItems.length || items.length})
+              </Title>
+
               <Spin spinning={loading || quoteLoading}>
                 {quoteError && (
                   <div style={{ marginBottom: 12 }}>
@@ -1256,59 +1252,227 @@ const CheckoutPage = () => {
                 <List
                   itemLayout="horizontal"
                   dataSource={displayItems}
-                  renderItem={(item: any) => (
-                    <List.Item>
-                      <List.Item.Meta
-                        avatar={
-                          <Avatar
-                            shape="square"
-                            size={64}
-                            src={resolveImageUrl(item.imageUrl)}
-                          />
-                        }
-                        title={
-                          <Text>
-                            {item.productName}
-                            {item.variantCode ? ` - ${item.variantCode}` : ""}
-                          </Text>
-                        }
-                        description={
-                          <Row justify="space-between" gutter={[12, 8]}>
-                            <Col flex="auto">
-                              <Space direction="vertical" size={2}>
-                                <Text type="secondary">SL: {item.quantity}</Text>
-                                <Text type="secondary" style={{ fontSize: 12 }}>
-                                  {[item.size, item.color, item.material]
-                                    .filter(Boolean)
-                                    .join(" / ")}
-                                </Text>
-                              </Space>
-                            </Col>
-                            <Col>
-                              <Space direction="vertical" size={0} align="end">
-                                <Text strong style={{ color: item.promotionId ? "#c81d1d" : undefined }}>
-                                  {formatMoney(item.lineTotal)}
-                                </Text>
-                                {item.promotionId && item.originalPrice > item.unitPrice && (
-                                  <Text delete type="secondary" style={{ fontSize: 12 }}>
-                                    {formatMoney(item.originalPrice * item.quantity)}
+                  split={false}
+                  renderItem={(item: any) => {
+                    const price = getCheckoutItemPrice(item);
+                    const variantText = [item.size, item.color, item.material]
+                      .filter(Boolean)
+                      .join(" / ");
+
+                    return (
+                      <List.Item style={{ padding: "0 0 18px" }}>
+                        <List.Item.Meta
+                          avatar={
+                            <Avatar
+                              shape="square"
+                              size={72}
+                              src={resolveImageUrl(item.imageUrl)}
+                              style={{ borderRadius: 12 }}
+                            />
+                          }
+                          title={
+                            <Text strong style={{ color: "#111827" }}>
+                              {item.productName}
+                              {item.variantCode ? ` - ${item.variantCode}` : ""}
+                            </Text>
+                          }
+                          description={
+                            <Row justify="space-between" gutter={[16, 8]}>
+                              <Col flex="auto" style={{ minWidth: 0 }}>
+                                <Space direction="vertical" size={4}>
+                                  {variantText && (
+                                    <Text type="secondary" style={{ fontSize: 12 }}>
+                                      {variantText}
+                                    </Text>
+                                  )}
+                                  {price.hasProductDiscount && (
+                                    <Text delete type="secondary" style={{ fontSize: 12 }}>
+                                      Giá gốc: {formatMoney(price.originalPrice)}
+                                    </Text>
+                                  )}
+                                  <Text style={{ color: "#374151", fontSize: 13 }}>
+                                    {price.hasProductDiscount
+                                      ? "Đơn giá sau giảm"
+                                      : "Đơn giá"}
+                                    : {formatMoney(price.unitPrice)}
                                   </Text>
-                                )}
-                              </Space>
-                            </Col>
-                          </Row>
-                        }
-                      />
-                    </List.Item>
-                  )}
+                                  <Text style={{ color: "#374151", fontSize: 13 }}>
+                                    Số lượng: <Text strong>{price.quantity}</Text>
+                                  </Text>
+                                </Space>
+                              </Col>
+                              <Col>
+                                <Space direction="vertical" size={3} align="end">
+                                  <Text type="secondary" style={{ fontSize: 12 }}>
+                                    Thành tiền
+                                  </Text>
+                                  <Text type="secondary" style={{ fontSize: 12 }}>
+                                    {formatMoney(price.unitPrice)} x {price.quantity}
+                                  </Text>
+                                  <Text
+                                    strong
+                                    style={{ color: "#dc2626", fontSize: 15 }}
+                                  >
+                                    = {formatMoney(price.lineTotal)}
+                                  </Text>
+                                </Space>
+                              </Col>
+                            </Row>
+                          }
+                        />
+                      </List.Item>
+                    );
+                  }}
                 />
 
-                <Divider />
+                <Divider style={{ margin: "4px 0 18px" }} />
 
-                <Row justify="space-between" style={{ marginBottom: 12 }}>
-                  <Text>Tạm tính sau khuyến mãi sản phẩm</Text>
-                  <Text strong>{formatMoney(subtotalBeforeVoucher)}</Text>
-                </Row>
+                <div style={{ marginBottom: 18 }}>
+                  <Text strong>Mã giảm giá</Text>
+
+                  {shouldShowVoucher ? (
+                    <div
+                      style={{
+                        alignItems: "center",
+                        background: "#f0fdf4",
+                        border: "1px solid #bbf7d0",
+                        borderRadius: 14,
+                        display: "flex",
+                        gap: 12,
+                        marginTop: 12,
+                        padding: 12,
+                      }}
+                    >
+                      <div
+                        style={{
+                          alignItems: "center",
+                          background: "#dcfce7",
+                          borderRadius: 10,
+                          color: "#16a34a",
+                          display: "flex",
+                          height: 36,
+                          justifyContent: "center",
+                          width: 36,
+                        }}
+                      >
+                        <TagsOutlined />
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <Text strong style={{ color: "#166534" }}>
+                          {rawVoucherCode}
+                        </Text>
+                        <div>
+                          <Text type="secondary" style={{ fontSize: 12 }}>
+                            Đã giảm {formatMoney(discount)}
+                          </Text>
+                        </div>
+                      </div>
+                      <Button
+                        type="text"
+                        size="small"
+                        icon={<CloseOutlined />}
+                        onClick={clearAppliedVoucher}
+                      />
+                    </div>
+                  ) : (
+                    <>
+                      <Space.Compact style={{ width: "100%", marginTop: 12 }}>
+                        <Select
+                          showSearch
+                          allowClear
+                          style={{ width: "100%" }}
+                          placeholder="Chọn hoặc nhập mã giảm giá"
+                          value={voucherCode || undefined}
+                          onSelect={(value) => setVoucherCode(value)}
+                          onSearch={(value) => setVoucherCode(value)}
+                          onInputKeyDown={(event) => {
+                            if (event.key === "Enter") {
+                              event.preventDefault();
+                              event.stopPropagation();
+                              handleApplyVoucher(event);
+                            }
+                          }}
+                          onChange={(value) => {
+                            const nextCode = value || "";
+                            setVoucherCode(nextCode);
+                            if (!nextCode) {
+                              clearAppliedVoucher();
+                              return;
+                            }
+
+                            if (
+                              appliedVoucher &&
+                              nextCode.toLowerCase() !==
+                                appliedVoucher.toLowerCase()
+                            ) {
+                              setAppliedVoucher(null);
+                              setAppliedVoucherInfo(null);
+                              setVoucherError("");
+                            }
+                          }}
+                          filterOption={(input, option) =>
+                            String(option?.label ?? "")
+                              .toLowerCase()
+                              .includes(input.toLowerCase())
+                          }
+                          options={availableVouchers
+                            .map((voucher) => ({
+                              label: buildVoucherLabel(voucher),
+                              value: getVoucherInputValue(voucher),
+                            }))
+                            .filter((option) => option.value)}
+                          notFoundContent={
+                            isAuthenticated
+                              ? "Bạn không có mã giảm giá nào"
+                              : "Đăng nhập để xem mã giảm giá của bạn"
+                          }
+                        />
+
+                        <Button
+                          type="primary"
+                          htmlType="button"
+                          onClick={handleApplyVoucher}
+                          loading={voucherApplying}
+                          disabled={voucherApplying || !voucherCode}
+                        >
+                          Áp dụng
+                        </Button>
+                      </Space.Compact>
+
+                      {voucherError && (
+                        <div style={{ marginTop: 10 }}>
+                          <Text type="danger">{voucherError}</Text>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+
+                <Divider style={{ margin: "0 0 18px" }} />
+
+                {productDiscountTotal > 0 ? (
+                  <>
+                    <Row justify="space-between" style={{ marginBottom: 12 }}>
+                      <Text>Tạm tính giá gốc</Text>
+                      <Text strong>{formatMoney(originalSubtotal)}</Text>
+                    </Row>
+                    <Row justify="space-between" style={{ marginBottom: 12 }}>
+                      <Text type="success">Giảm khuyến mãi sản phẩm</Text>
+                      <Text strong type="success">
+                        - {formatMoney(productDiscountTotal)}
+                      </Text>
+                    </Row>
+                    <Row justify="space-between" style={{ marginBottom: 12 }}>
+                      <Text>Tạm tính sau khuyến mãi</Text>
+                      <Text strong>{formatMoney(subtotalBeforeVoucher)}</Text>
+                    </Row>
+                  </>
+                ) : (
+                  <Row justify="space-between" style={{ marginBottom: 12 }}>
+                    <Text>Tạm tính hàng hóa</Text>
+                    <Text strong>{formatMoney(subtotalBeforeVoucher)}</Text>
+                  </Row>
+                )}
 
                 <Row justify="space-between" style={{ marginBottom: 12 }}>
                   <Text>Phí vận chuyển</Text>
@@ -1319,29 +1483,22 @@ const CheckoutPage = () => {
                   </Text>
                 </Row>
 
-                {discount > 0 && (
+                {shouldShowVoucher && (
                   <Row justify="space-between" style={{ marginBottom: 12 }}>
-                    <Text type="success">Giảm giá voucher</Text>
+                    <Text type="success">Giảm voucher ({rawVoucherCode})</Text>
                     <Text strong type="success">
                       - {formatMoney(discount)}
                     </Text>
                   </Row>
                 )}
 
-                {appliedVoucher && (
-                  <Row justify="space-between" style={{ marginBottom: 12 }}>
-                    <Text>Mã đã dùng</Text>
-                    <Tag color="green">{appliedVoucher}</Tag>
-                  </Row>
-                )}
-
                 <Divider />
 
-                <Row justify="space-between">
+                <Row align="middle" justify="space-between">
                   <Title level={4} style={{ margin: 0 }}>
                     Tổng cộng
                   </Title>
-                  <Title level={4} style={{ color: "#c81d1d", margin: 0 }}>
+                  <Title level={4} style={{ color: "#dc2626", margin: 0 }}>
                     {formatMoney(total)}
                   </Title>
                 </Row>
@@ -1358,11 +1515,17 @@ const CheckoutPage = () => {
                     danger
                     block
                     size="large"
+                    htmlType="button"
                     loading={loading}
                     disabled={isShippingLoading || !!shippingError || total <= 0}
-                    style={{ marginTop: 24 }}
+                    style={{
+                      borderRadius: 12,
+                      fontWeight: 700,
+                      height: 52,
+                      marginTop: 24,
+                    }}
                   >
-                    {loading ? "Đang xử lý..." : "Hoàn tất đặt hàng"}
+                    {loading ? "Đang xử lý..." : "HOÀN TẤT ĐẶT HÀNG"}
                   </Button>
                 </Popconfirm>
               </Spin>

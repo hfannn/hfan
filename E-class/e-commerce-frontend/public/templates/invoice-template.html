@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Hóa đơn {{ORDER_CODE}}</title>
+    <style>
+      @page {
+        size: 80mm auto;
+        margin: 4mm;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        padding: 0;
+        background: #fff;
+        color: #000;
+        font-family: "Courier New", monospace;
+        font-size: 12px;
+        line-height: 1.35;
+      }
+
+      .receipt {
+        width: 72mm;
+        margin: 0 auto;
+      }
+
+      .center {
+        text-align: center;
+      }
+
+      .bold {
+        font-weight: 700;
+      }
+
+      .shop-name {
+        font-size: 18px;
+        font-weight: 700;
+        letter-spacing: 1px;
+      }
+
+      .title {
+        font-size: 15px;
+        font-weight: 700;
+        text-align: center;
+        margin: 8px 0;
+      }
+
+      .line {
+        border-top: 1px dashed #000;
+        margin: 8px 0;
+      }
+
+      .row {
+        display: flex;
+        justify-content: space-between;
+        gap: 8px;
+        margin: 2px 0;
+      }
+
+      .label {
+        flex: 0 0 auto;
+      }
+
+      .value {
+        text-align: right;
+        font-weight: 700;
+        word-break: break-word;
+      }
+
+      .item-header,
+      .item-row {
+        display: grid;
+        grid-template-columns: 1fr 28px 80px;
+        gap: 4px;
+      }
+
+      .item-header {
+        font-weight: 700;
+        border-bottom: 1px solid #000;
+        padding-bottom: 4px;
+      }
+
+      .item-row {
+        margin-top: 8px;
+      }
+
+      .item-name {
+        font-weight: 700;
+        word-break: break-word;
+      }
+
+      .item-variant {
+        grid-column: 1 / -1;
+        font-size: 11px;
+        color: #333;
+        margin-top: 2px;
+        word-break: break-word;
+      }
+
+      .qty {
+        text-align: center;
+      }
+
+      .money {
+        text-align: right;
+        white-space: nowrap;
+      }
+
+      .total-row {
+        display: flex;
+        justify-content: space-between;
+        gap: 8px;
+        margin: 4px 0;
+      }
+
+      .total-row span:first-child {
+        flex: 1;
+      }
+
+      .total-row span:last-child {
+        text-align: right;
+        white-space: nowrap;
+        font-weight: 700;
+      }
+
+      .grand-total {
+        font-size: 15px;
+        font-weight: 700;
+        margin-top: 8px;
+      }
+
+      .footer {
+        margin-top: 14px;
+        text-align: center;
+        font-weight: 700;
+      }
+
+      @media print {
+        body {
+          -webkit-print-color-adjust: exact;
+          print-color-adjust: exact;
+        }
+
+        .receipt {
+          width: 72mm;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="receipt">
+      <div class="center">
+        <div class="shop-name">{{SHOP_NAME}}</div>
+        <div>Hotline: {{SHOP_PHONE}}</div>
+        <div>Đ/c: {{SHOP_ADDRESS}}</div>
+      </div>
+
+      <div class="line"></div>
+
+      <div class="title">HÓA ĐƠN BÁN HÀNG</div>
+
+      <div class="line"></div>
+
+      <div class="row">
+        <span class="label">Mã HĐ:</span>
+        <span class="value">{{ORDER_CODE}}</span>
+      </div>
+
+      <div class="row">
+        <span class="label">Ngày in:</span>
+        <span class="value">{{PRINT_TIME}}</span>
+      </div>
+
+      <div class="row">
+        <span class="label">Thu ngân:</span>
+        <span class="value">{{CASHIER_NAME}}</span>
+      </div>
+
+      <div class="row">
+        <span class="label">Loại đơn:</span>
+        <span class="value">{{ORDER_TYPE}}</span>
+      </div>
+
+      <div class="row">
+        <span class="label">Thanh toán:</span>
+        <span class="value">{{PAYMENT_METHOD}}</span>
+      </div>
+
+      <div class="row">
+        <span class="label">Trạng thái TT:</span>
+        <span class="value">{{PAYMENT_STATUS}}</span>
+      </div>
+
+      <div class="row">
+        <span class="label">Khách hàng:</span>
+        <span class="value">{{CUSTOMER_NAME}}</span>
+      </div>
+
+      <div class="row">
+        <span class="label">SĐT:</span>
+        <span class="value">{{CUSTOMER_PHONE}}</span>
+      </div>
+
+      <div class="row">
+        <span class="label">Giao tới:</span>
+        <span class="value">{{CUSTOMER_ADDRESS}}</span>
+      </div>
+
+      <div class="line"></div>
+
+      <div class="item-header">
+        <div>SẢN PHẨM</div>
+        <div class="qty">SL</div>
+        <div class="money">TỔNG</div>
+      </div>
+
+      {{ITEM_ROWS}}
+
+      <div class="line"></div>
+
+      <div class="total-row">
+        <span>Tổng tiền hàng:</span>
+        <span>{{SUBTOTAL}}</span>
+      </div>
+
+      {{DISCOUNT_LINE}}
+
+      <div class="total-row">
+        <span>Phí vận chuyển:</span>
+        <span>{{SHIPPING_FEE}}</span>
+      </div>
+
+      <div class="line"></div>
+
+      <div class="total-row grand-total">
+        <span>CẦN THANH TOÁN:</span>
+        <span>{{TOTAL_AMOUNT}}</span>
+      </div>
+
+      <div class="line"></div>
+
+      <div class="footer">CẢM ƠN VÀ HẸN GẶP LẠI!</div>
+    </div>
+  </body>
+</html>

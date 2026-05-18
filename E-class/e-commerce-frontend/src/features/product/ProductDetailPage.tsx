@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   Row,
@@ -53,8 +53,9 @@ const getVariantAttribute = (variant: Variant | null | undefined, code: string) 
   }
 
   const normalizedCode = code.toLowerCase();
-  const directField = (variant as Record<string, unknown>)[normalizedCode];
-  const nameField = (variant as Record<string, unknown>)[`${normalizedCode}Name`];
+  const variantFields = variant as unknown as Record<string, unknown>;
+  const directField = variantFields[normalizedCode];
+  const nameField = variantFields[`${normalizedCode}Name`];
 
   const value = nameField ?? directField;
   return value != null && String(value).trim() ? String(value) : null;
@@ -100,6 +101,8 @@ const ProductDetailPage = () => {
   const [selectedColor, setSelectedColor] = useState<string | null>(null);
   const [selectedMaterial, setSelectedMaterial] = useState<string | null>(null);
   const [quantity, setQuantity] = useState(1);
+  const [addingToCart, setAddingToCart] = useState(false);
+  const addingToCartRef = useRef(false);
 
   useEffect(() => {
     if (!id) return;
@@ -157,19 +160,19 @@ const ProductDetailPage = () => {
         ...new Set(
           sellableVariants.map(getVariantSize).filter(Boolean),
         ),
-      ];
+      ] as string[];
 
       const allColors = [
         ...new Set(
           sellableVariants.map(getVariantColor).filter(Boolean),
         ),
-      ];
+      ] as string[];
 
       const allMaterials = [
         ...new Set(
           sellableVariants.map(getVariantMaterial).filter(Boolean),
         ),
-      ];
+      ] as string[];
 
       return { allSizes, allColors, allMaterials };
     }, [product, sellableVariants]);
@@ -298,6 +301,10 @@ const ProductDetailPage = () => {
   };
 
   const handleAddToCart = async () => {
+    if (addingToCart || addingToCartRef.current) {
+      return;
+    }
+
     if (!selectedVariant) {
       message.warning(
         hasMaterialOptions
@@ -328,7 +335,13 @@ const ProductDetailPage = () => {
       okText: "Thêm",
       cancelText: "Hủy",
       onOk: async () => {
+        if (addingToCartRef.current) {
+          return;
+        }
+
         try {
+          addingToCartRef.current = true;
+          setAddingToCart(true);
           await cartService.addToCart({
             productVariantId: selectedVariant.id,
             quantity,
@@ -341,6 +354,9 @@ const ProductDetailPage = () => {
             error?.response?.data?.message ||
               "Thêm vào giỏ hàng thất bại. Vui lòng thử lại.",
           );
+        } finally {
+          addingToCartRef.current = false;
+          setAddingToCart(false);
         }
       },
     });
@@ -633,7 +649,8 @@ const ProductDetailPage = () => {
                   icon={<ShoppingCartOutlined />}
                   size="large"
                   onClick={handleAddToCart}
-                  disabled={!selectedVariant || isOutOfStock}
+                  loading={addingToCart}
+                  disabled={!selectedVariant || isOutOfStock || addingToCart}
                   style={{ minWidth: 320 }}
                 >
                   {isOutOfStock ? "Hết hàng" : "Thêm vào giỏ hàng"}

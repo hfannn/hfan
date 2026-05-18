@@ -83,6 +83,8 @@ interface AttributeOption {
   id: number;
 }
 
+const UNIQUE_ATTRIBUTE_CODES = ["COLOR", "SIZE", "MATERIAL"];
+
 const VariantDetailModal: React.FC<VariantDetailModalProps> = ({
   open,
   productId,
@@ -110,6 +112,7 @@ const VariantDetailModal: React.FC<VariantDetailModalProps> = ({
   const [variantActiveStatus, setVariantActiveStatus] = useState<
     "all" | "active" | "inactive"
   >("all");
+  const [duplicateRowIndexes, setDuplicateRowIndexes] = useState<number[]>([]);
 
   const fetchProductDetails = async () => {
     if (!productId) {
@@ -189,6 +192,87 @@ const VariantDetailModal: React.FC<VariantDetailModalProps> = ({
     return ids;
   };
 
+  const normalizeAttributeValue = (value: unknown) =>
+    String(value ?? "").trim().toLowerCase();
+
+  const findAttributeValueId = (attrCode: string, selectedValue: unknown) => {
+    const attr = dynamicAttributes.find(
+      (item: any) => String(item.code).toUpperCase() === attrCode,
+    );
+
+    const normalizedSelectedValue = normalizeAttributeValue(selectedValue);
+    const foundValue = attr?.values?.find(
+      (value: any) =>
+        String(value.id) === String(selectedValue) ||
+        normalizeAttributeValue(value.value) === normalizedSelectedValue ||
+        normalizeAttributeValue(value.label) === normalizedSelectedValue,
+    );
+
+    return foundValue?.id ? String(foundValue.id) : normalizedSelectedValue;
+  };
+
+  const buildVariantKeyFromAttributes = (attributes?: Record<string, string>) => {
+    const parts = UNIQUE_ATTRIBUTE_CODES.map((attrCode) =>
+      findAttributeValueId(attrCode, attributes?.[attrCode]),
+    );
+
+    if (parts.some((part) => !part)) {
+      return "";
+    }
+
+    return [productId, ...parts].join("-");
+  };
+
+  const formatVariantLabel = (attributes?: Record<string, string>) =>
+    UNIQUE_ATTRIBUTE_CODES.map((attrCode) => attributes?.[attrCode])
+      .filter(Boolean)
+      .join(" / ");
+
+  const existingVariantKeys = useMemo(() => {
+    return new Set(
+      (product?.variants || [])
+        .map((variant) => buildVariantKeyFromAttributes(variant.attributes))
+        .filter(Boolean),
+    );
+  }, [product?.variants, dynamicAttributes, productId]);
+
+  const validateNewVariantRows = (rows: any[]) => {
+    const seenNewKeys = new Set<string>();
+    const duplicateIndexes: number[] = [];
+    const existingDuplicates: string[] = [];
+    const newDuplicates: string[] = [];
+
+    rows.forEach((row, index) => {
+      const key = buildVariantKeyFromAttributes(row?.attributes);
+
+      if (!key) {
+        return;
+      }
+
+      const label = formatVariantLabel(row?.attributes) || `Dòng ${index + 1}`;
+
+      if (existingVariantKeys.has(key)) {
+        duplicateIndexes.push(index);
+        existingDuplicates.push(label);
+        return;
+      }
+
+      if (seenNewKeys.has(key)) {
+        duplicateIndexes.push(index);
+        newDuplicates.push(`Dòng ${index + 1}: ${label}`);
+        return;
+      }
+
+      seenNewKeys.add(key);
+    });
+
+    return {
+      duplicateIndexes,
+      existingDuplicates,
+      newDuplicates,
+    };
+  };
+
   const handleGenerateVariants = () => {
     if (!dynamicAttributes.length) {
       return;
@@ -215,23 +299,70 @@ const VariantDetailModal: React.FC<VariantDetailModalProps> = ({
 
     const combinations = cartesian(entries.map(([, values]) => values));
 
-    const variants = combinations.map((combination) => {
+    const currentRows = addVariantForm.getFieldValue("variants") || [];
+    const currentKeys = new Set(
+      currentRows
+        .map((row: any) => buildVariantKeyFromAttributes(row?.attributes))
+        .filter(Boolean),
+    );
+    let skippedExistingCount = 0;
+    let skippedDuplicateCount = 0;
+
+    const variants = combinations.flatMap((combination) => {
       const attributes: Record<string, string> = {};
 
       entries.forEach(([attrCode], index) => {
         attributes[attrCode] = combination[index];
       });
 
-      return {
+      const key = buildVariantKeyFromAttributes(attributes);
+
+      if (key && existingVariantKeys.has(key)) {
+        skippedExistingCount += 1;
+        return [];
+      }
+
+      if (key && currentKeys.has(key)) {
+        skippedDuplicateCount += 1;
+        return [];
+      }
+
+      if (key) {
+        currentKeys.add(key);
+      }
+
+      return [{
         sku: generateSku(attributes),
         attributes,
         costPrice: bulkCostPrice || 0,
         sellingPrice: bulkSellingPrice || 0,
         stockQuantity: 0,
-      };
+      }];
     });
 
-    addVariantForm.setFieldsValue({ variants });
+    addVariantForm.setFieldsValue({ variants: [...currentRows, ...variants] });
+    setDuplicateRowIndexes([]);
+
+    if (skippedExistingCount > 0) {
+      notification.warning({
+        message: "Đã bỏ qua biến thể trùng",
+        description: `Đã bỏ qua ${skippedExistingCount} biến thể vì đã tồn tại.`,
+      });
+    }
+
+    if (skippedDuplicateCount > 0) {
+      notification.warning({
+        message: "Đã bỏ qua dòng trùng",
+        description: `Đã bỏ qua ${skippedDuplicateCount} biến thể vì trùng với danh sách thêm mới hiện tại.`,
+      });
+    }
+
+    if (!variants.length) {
+      notification.info({
+        message: "Không có biến thể mới",
+        description: "Các tổ hợp đã chọn đều đã tồn tại hoặc đang có trong danh sách thêm mới.",
+      });
+    }
   };
 
   const handleApplyBulkPrices = () => {
@@ -251,6 +382,7 @@ const VariantDetailModal: React.FC<VariantDetailModalProps> = ({
     setSelectedBulkAttributes({});
     setBulkCostPrice(null);
     setBulkSellingPrice(null);
+    setDuplicateRowIndexes([]);
   };
 
   const resetVariantFilters = () => {
@@ -292,7 +424,33 @@ const VariantDetailModal: React.FC<VariantDetailModalProps> = ({
       return;
     }
 
-    const variants = (values.variants || []).map((item: any) => ({
+    const rawVariants = values.variants || [];
+    const duplicateResult = validateNewVariantRows(rawVariants);
+
+    if (duplicateResult.duplicateIndexes.length > 0) {
+      setDuplicateRowIndexes(duplicateResult.duplicateIndexes);
+
+      if (duplicateResult.existingDuplicates.length === 1 && duplicateResult.newDuplicates.length === 0) {
+        notification.error({
+          message: "Biến thể đã tồn tại",
+          description: `Biến thể ${duplicateResult.existingDuplicates[0]} đã tồn tại. Vui lòng sửa trực tiếp ở danh sách biến thể phía trên.`,
+        });
+        return;
+      }
+
+      notification.error({
+        message: "Có biến thể bị trùng",
+        description:
+          duplicateResult.existingDuplicates.length > 0
+            ? `Có ${duplicateResult.existingDuplicates.length} biến thể đã tồn tại, vui lòng kiểm tra lại trước khi lưu.`
+            : "Có biến thể trùng trong danh sách thêm mới. Vui lòng kiểm tra lại.",
+      });
+      return;
+    }
+
+    setDuplicateRowIndexes([]);
+
+    const variants = rawVariants.map((item: any) => ({
       code: item.sku,
       costPrice: item.costPrice,
       sellingPrice: item.sellingPrice,
@@ -308,13 +466,23 @@ const VariantDetailModal: React.FC<VariantDetailModalProps> = ({
       return;
     }
 
-    await onAddVariant({
-      productId,
-      variants,
-    });
+    try {
+      await onAddVariant({
+        productId,
+        variants,
+      });
 
-    handleResetForm();
-    fetchProductDetails();
+      handleResetForm();
+      fetchProductDetails();
+    } catch (error: any) {
+      notification.error({
+        message: "Không thể thêm biến thể",
+        description:
+          error?.response?.data?.message ||
+          error?.response?.data ||
+          "Vui lòng kiểm tra lại danh sách biến thể.",
+      });
+    }
   };
 
   const columns = [
@@ -609,6 +777,7 @@ const VariantDetailModal: React.FC<VariantDetailModalProps> = ({
               autoComplete="off"
               onValuesChange={(_, allValues) => {
                 const variants = allValues.variants || [];
+                setDuplicateRowIndexes([]);
 
                 const nextVariants = variants.map((item: any) => {
                   if (!item?.attributes) {
@@ -660,7 +829,17 @@ const VariantDetailModal: React.FC<VariantDetailModalProps> = ({
                         key={key}
                         gutter={8}
                         align="middle"
-                        style={{ marginBottom: 8 }}
+                        style={{
+                          marginBottom: 8,
+                          padding: duplicateRowIndexes.includes(name) ? 8 : 0,
+                          border: duplicateRowIndexes.includes(name)
+                            ? "1px solid #ff4d4f"
+                            : "1px solid transparent",
+                          background: duplicateRowIndexes.includes(name)
+                            ? "#fff1f0"
+                            : "transparent",
+                          borderRadius: 6,
+                        }}
                       >
                         <Col span={4}>
                           <Form.Item {...restField} name={[name, "sku"]} noStyle>

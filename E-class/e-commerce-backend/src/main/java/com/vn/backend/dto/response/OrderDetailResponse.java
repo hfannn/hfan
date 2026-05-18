@@ -24,6 +24,8 @@ public class OrderDetailResponse {
     private String ward;
 
     private String paymentMethodName;
+    private String paymentStatus;
+    private String paymentMethodCode;
     private BigDecimal subtotalAmount;
     private BigDecimal originalSubtotal;
     private BigDecimal productDiscountTotal;

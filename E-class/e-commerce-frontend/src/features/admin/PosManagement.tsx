@@ -297,11 +297,12 @@ const PosManagement = () => {
     try {
       setLoadingDiscounts(true);
       const data = await posService.getAvailableDiscounts(orderId);
+      const coupons = (data || []).filter((item) => item.voucherType === "COUPON");
 
-      setAvailableDiscounts(data || []);
+      setAvailableDiscounts(coupons);
 
       if (selectedDiscount) {
-        const stillExists = (data || []).find(
+        const stillExists = coupons.find(
           (item) =>
             item.voucherType === selectedDiscount.voucherType &&
             item.id === selectedDiscount.id,
@@ -575,10 +576,6 @@ const PosManagement = () => {
           selectedDiscount?.voucherType === "COUPON"
             ? selectedDiscount?.id ?? null
             : null,
-        promotionId:
-          selectedDiscount?.voucherType === "PROMOTION"
-            ? selectedDiscount?.id ?? null
-            : null,
         note: checkoutData.note,
       };
 
@@ -726,9 +723,7 @@ const PosManagement = () => {
 
               {selected && <Tag color="blue">Đang chọn</Tag>}
 
-              <Tag color={record.voucherType === "COUPON" ? "gold" : "cyan"}>
-                {record.voucherType === "COUPON" ? "Coupon" : "Khuyến mãi"}
-              </Tag>
+              <Tag color="gold">M� gi?m gi�</Tag>
             </Space>
 
             <Text>{record.name}</Text>

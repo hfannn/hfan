@@ -17,6 +17,7 @@ import com.vn.backend.repository.ProductVariantRepository;
 import com.vn.backend.security.CustomUserDetails;
 import com.vn.backend.service.CheckoutQuoteService;
 import com.vn.backend.service.DiscountService;
+import com.vn.backend.service.GhnShippingService;
 import com.vn.backend.service.ProductPriceService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -38,7 +39,7 @@ public class CheckoutQuoteServiceImpl implements CheckoutQuoteService {
     private final ProductVariantRepository productVariantRepository;
     private final ProductPriceService productPriceService;
     private final DiscountService discountService;
-    private final GHTKLogicHandler ghtkLogicHandler;
+    private final GhnShippingService ghnShippingService;
 
     @Override
     public CheckoutQuoteResponse quote(CheckoutQuoteRequest request, CustomUserDetails userDetails) {
@@ -68,11 +69,10 @@ public class CheckoutQuoteServiceImpl implements CheckoutQuoteService {
         BigDecimal originalSubtotal = BigDecimal.ZERO;
         BigDecimal productDiscountTotal = BigDecimal.ZERO;
         BigDecimal subtotalBeforeVoucher = BigDecimal.ZERO;
-        List<Integer> quantities = new ArrayList<>();
 
         for (OrderItemRequest item : items) {
             if (item.getVariantId() == null || item.getQuantity() == null || item.getQuantity() <= 0) {
-                throw new InvalidRequestException("San pham hoac so luong khong hop le.");
+                throw new InvalidRequestException("Sản phẩm hoặc số lượng không hợp lệ.");
             }
 
             ProductVariant variant = variantMap.get(item.getVariantId());
@@ -88,7 +88,6 @@ public class CheckoutQuoteServiceImpl implements CheckoutQuoteService {
             originalSubtotal = originalSubtotal.add(itemOriginalSubtotal);
             subtotalBeforeVoucher = subtotalBeforeVoucher.add(lineTotal);
             productDiscountTotal = productDiscountTotal.add(itemOriginalSubtotal.subtract(lineTotal));
-            quantities.add(item.getQuantity());
 
             quoteItems.add(CheckoutQuoteItemResponse.builder()
                     .productId(variant.getProduct() != null ? variant.getProduct().getId() : null)
@@ -123,15 +122,20 @@ public class CheckoutQuoteServiceImpl implements CheckoutQuoteService {
                 appliedVoucherCode = discountResponse.getCode();
                 voucherValid = true;
                 voucherMessage = discountResponse.getMessage();
-            } catch (InvalidRequestException ex) {
+            } catch (InvalidRequestException | IllegalArgumentException ex) {
                 voucherDiscountAmount = BigDecimal.ZERO;
                 appliedVoucherCode = null;
                 voucherValid = false;
                 voucherMessage = ex.getMessage();
+            } catch (RuntimeException ex) {
+                voucherDiscountAmount = BigDecimal.ZERO;
+                appliedVoucherCode = null;
+                voucherValid = false;
+                voucherMessage = "Không thể kiểm tra mã giảm giá. Vui lòng thử lại.";
             }
         }
 
-        BigDecimal shippingFee = calculateShippingFee(shippingInfo, subtotalBeforeVoucher, quantities);
+        BigDecimal shippingFee = calculateShippingFee(shippingInfo, subtotalBeforeVoucher, items);
         BigDecimal productRevenue = subtotalBeforeVoucher.subtract(voucherDiscountAmount).max(BigDecimal.ZERO);
         BigDecimal finalTotal = productRevenue.add(shippingFee);
 
@@ -179,37 +183,35 @@ public class CheckoutQuoteServiceImpl implements CheckoutQuoteService {
     private BigDecimal calculateShippingFee(
             ShippingInfoRequest shippingInfo,
             BigDecimal subtotalBeforeVoucher,
-            List<Integer> quantities
+            List<OrderItemRequest> items
     ) {
         if (shippingInfo == null
-                || !StringUtils.hasText(shippingInfo.getProvince())
-                || !StringUtils.hasText(shippingInfo.getDistrict())
-                || !StringUtils.hasText(shippingInfo.getAddress())) {
+                || shippingInfo.getDistrictId() == null
+                || !StringUtils.hasText(shippingInfo.getWardCode())) {
             return BigDecimal.ZERO;
         }
 
-        return ghtkLogicHandler.calculateShippingFee(
-                shippingInfo.getProvince(),
-                shippingInfo.getDistrict(),
-                shippingInfo.getAddress(),
+        return ghnShippingService.calculateShippingFee(
+                shippingInfo.getDistrictId(),
+                shippingInfo.getWardCode(),
                 subtotalBeforeVoucher,
-                quantities
+                items
         );
     }
 
     private void validateVariantCanBeQuoted(ProductVariant variant) {
         if (variant == null) {
-            throw new InvalidRequestException("San pham khong con kha dung.");
+            throw new InvalidRequestException("Sản phẩm không còn khả dụng.");
         }
 
         if (!Boolean.TRUE.equals(variant.getIsActive()) || variant.getDeletedAt() != null) {
-            throw new InvalidRequestException("Bien the san pham da ngung ban: " + variant.getCode());
+            throw new InvalidRequestException("Biến thể sản phẩm đã ngừng bán: " + variant.getCode());
         }
 
         if (variant.getProduct() == null
                 || !Boolean.TRUE.equals(variant.getProduct().getIsActive())
                 || variant.getProduct().getDeletedAt() != null) {
-            throw new InvalidRequestException("San pham da ngung ban: " + variant.getCode());
+            throw new InvalidRequestException("Sản phẩm đã ngừng bán: " + variant.getCode());
         }
     }
 

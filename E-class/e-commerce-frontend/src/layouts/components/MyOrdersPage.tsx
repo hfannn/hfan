@@ -89,8 +89,23 @@ const MyOrdersPage = ({
     }
   };
 
+  const normalizeStatus = (status?: string) => {
+    const raw = String(status ?? "").trim().toUpperCase();
+
+    if (["PENDING", "WAITING_CONFIRM"].includes(raw)) return "PENDING";
+    if (["CONFIRMED"].includes(raw)) return "CONFIRMED";
+    if (["SHIPPING", "DELIVERING"].includes(raw)) return "SHIPPING";
+    if (["COMPLETED"].includes(raw)) return "COMPLETED";
+    if (["CANCELLED", "CANCELED"].includes(raw)) return "CANCELLED";
+
+    return raw;
+  };
+
+  const normalizePaymentStatus = (paymentStatus?: string) =>
+    String(paymentStatus ?? "").trim().toUpperCase();
+
   const getStatusTag = (status: string) => {
-    switch (status) {
+    switch (normalizeStatus(status)) {
       case "PENDING":
         return <Tag color="gold">Chờ xác nhận</Tag>;
       case "CONFIRMED":
@@ -106,13 +121,17 @@ const MyOrdersPage = ({
     }
   };
   const getPaymentStatusTag = (paymentStatus?: string) => {
-    switch (paymentStatus) {
+    switch (normalizePaymentStatus(paymentStatus)) {
       case "PAID":
         return <Tag color="green">Đã thanh toán</Tag>;
+      case "UNPAID":
+        return <Tag color="default">Chưa thanh toán</Tag>;
       case "PENDING":
-        return <Tag color="gold">Chưa thanh toán</Tag>;
+        return <Tag color="gold">Chờ thanh toán</Tag>;
       case "FAILED":
         return <Tag color="red">Thanh toán thất bại</Tag>;
+      case "REFUNDED":
+        return <Tag color="blue">Đã hoàn tiền</Tag>;
       case "EXPIRED":
         return <Tag color="orange">Hết hạn thanh toán</Tag>;
       default:
@@ -204,7 +223,7 @@ const MyOrdersPage = ({
               Thanh toán lại
             </Button>
           )}
-          {record.status === "PENDING" && (
+          {normalizeStatus(record.status) === "PENDING" && (
             <Popconfirm
               title="Bạn chắc chắn muốn hủy đơn hàng này?"
               description="Hành động này không thể hoàn tác."

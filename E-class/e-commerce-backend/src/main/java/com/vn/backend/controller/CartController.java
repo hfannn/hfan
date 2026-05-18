@@ -2,13 +2,14 @@ package com.vn.backend.controller;
 
 import com.vn.backend.dto.request.AddCartRequest;
 import com.vn.backend.dto.response.CartResponse;
-import com.vn.backend.dto.response.OrderResponse;
 import com.vn.backend.security.CustomUserDetails;
 import com.vn.backend.service.CartService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 @RestController
 @RequestMapping("/v1/cart")
 @CrossOrigin(origins = "http://localhost:5173")
@@ -22,7 +23,7 @@ public class CartController {
             @RequestBody AddCartRequest request,
             @AuthenticationPrincipal CustomUserDetails userDetails
     ) {
-        System.out.println("UserDetails: " + userDetails);
+        ensureAuthenticated(userDetails);
         return ResponseEntity.ok(
                 cartService.addToCart(userDetails.getUserId(), request)
         );
@@ -32,6 +33,7 @@ public class CartController {
     public ResponseEntity<CartResponse> getCart(
             @AuthenticationPrincipal CustomUserDetails userDetails
     ) {
+        ensureAuthenticated(userDetails);
         return ResponseEntity.ok(
                 cartService.getActiveCart(userDetails.getUserId())
         );
@@ -43,6 +45,7 @@ public class CartController {
             @RequestParam int quantity,
             @AuthenticationPrincipal CustomUserDetails userDetails
     ) {
+        ensureAuthenticated(userDetails);
         return ResponseEntity.ok(
                 cartService.updateQuantity(
                         userDetails.getUserId(),
@@ -57,6 +60,7 @@ public class CartController {
             @PathVariable Long cartItemId,
             @AuthenticationPrincipal CustomUserDetails userDetails
     ) {
+        ensureAuthenticated(userDetails);
         return ResponseEntity.ok(
                 cartService.removeItem(userDetails.getUserId(), cartItemId)
         );
@@ -66,7 +70,14 @@ public class CartController {
     public ResponseEntity<Void> clearCart(
             @AuthenticationPrincipal CustomUserDetails userDetails
     ) {
+        ensureAuthenticated(userDetails);
         cartService.clearCart(userDetails.getUserId());
         return ResponseEntity.noContent().build();
+    }
+
+    private void ensureAuthenticated(CustomUserDetails userDetails) {
+        if (userDetails == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Vui lòng đăng nhập để thao tác giỏ hàng");
+        }
     }
 }

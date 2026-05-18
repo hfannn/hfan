@@ -25,7 +25,6 @@ import com.vn.backend.entity.PaymentMethod;
 import com.vn.backend.entity.Product;
 import com.vn.backend.entity.ProductImage;
 import com.vn.backend.entity.ProductVariant;
-import com.vn.backend.entity.Promotion;
 import com.vn.backend.entity.Store;
 import com.vn.backend.entity.UserProfile;
 import com.vn.backend.entity.VariantAttributeValue;
@@ -41,7 +40,6 @@ import com.vn.backend.repository.PaymentMethodRepository;
 import com.vn.backend.repository.PaymentRepository;
 import com.vn.backend.repository.ProductImageRepository;
 import com.vn.backend.repository.ProductVariantRepository;
-import com.vn.backend.repository.PromotionRepository;
 import com.vn.backend.repository.StoreRepository;
 import com.vn.backend.repository.UserProfileRepository;
 import com.vn.backend.service.PosService;
@@ -90,7 +88,6 @@ public class PosServiceImpl implements PosService {
     private final PaymentRepository paymentRepository;
     private final InventoryTransactionRepository inventoryTransactionRepository;
     private final OrderStatusHistoryRepository orderStatusHistoryRepository;
-    private final PromotionRepository promotionRepository;
     private final CouponRepository couponRepository;
     private final CouponUsageRepository couponUsageRepository;
     private final UserProfileRepository userProfileRepository;
@@ -464,8 +461,8 @@ public class PosServiceImpl implements PosService {
         boolean hasCoupon = request.getCouponId() != null;
         boolean hasPromotion = request.getPromotionId() != null;
 
-        if (hasCoupon && hasPromotion) {
-            throw new IllegalArgumentException("Chỉ được áp dụng một voucher cho mỗi hóa đơn");
+        if (hasPromotion) {
+            throw new IllegalArgumentException("Khuyến mãi sản phẩm không được áp dụng như mã giảm giá đơn hàng");
         }
 
         if (hasCoupon) {
@@ -484,26 +481,9 @@ public class PosServiceImpl implements PosService {
                     totalAmount,
                     coupon.getDiscountType(),
                     coupon.getDiscountValue(),
-                    null
+                    coupon.getMaxDiscountAmount()
             );
             appliedVoucherCode = coupon.getCode();
-        }
-
-        if (hasPromotion) {
-            Promotion promotion = promotionRepository.findById(request.getPromotionId())
-                    .orElseThrow(() -> new EntityNotFoundException("Không tìm thấy chương trình khuyến mãi"));
-
-            if (!isPromotionApplicable(promotion, order, totalAmount)) {
-                throw new IllegalArgumentException("Khuyến mãi không còn hợp lệ hoặc không đủ điều kiện áp dụng");
-            }
-
-            discountAmount = calculateDiscountAmount(
-                    totalAmount,
-                    promotion.getDiscountType(),
-                    promotion.getDiscountValue(),
-                    promotion.getMaxDiscountAmount()
-            );
-            appliedVoucherCode = promotion.getCode();
         }
 
         if (discountAmount.compareTo(totalAmount) > 0) {
@@ -583,16 +563,7 @@ public class PosServiceImpl implements PosService {
             return List.of();
         }
 
-        OffsetDateTime now = OffsetDateTime.now();
         List<PosAvailableDiscountResponse> results = new ArrayList<>();
-
-        List<Promotion> promotions = promotionRepository.findAllAvailableForPos(now);
-        for (Promotion promotion : promotions) {
-            if (!isPromotionApplicable(promotion, order, subtotal)) {
-                continue;
-            }
-            results.add(mapPromotionToPosDiscountResponse(promotion, subtotal));
-        }
 
         if (order.getCustomer() != null) {
             Long customerId = order.getCustomer().getId();
@@ -942,46 +913,22 @@ public class PosServiceImpl implements PosService {
         return "KH" + System.currentTimeMillis();
     }
 
-    private boolean isPromotionApplicable(Promotion promotion, Order order, BigDecimal subtotal) {
-        if (promotion == null || Boolean.FALSE.equals(promotion.getIsActive())) {
-            return false;
-        }
-
-        if (promotion.getMinOrderValue() != null
-                && subtotal.compareTo(promotion.getMinOrderValue()) < 0) {
-            return false;
-        }
-
-        if (promotion.getUsageLimit() != null && promotion.getUsageLimit() > 0) {
-            long usedCount = couponUsageRepository.countByPromotion_Id(promotion.getId());
-            if (usedCount >= promotion.getUsageLimit()) {
-                return false;
-            }
-        }
-
-        if (promotion.getUsageLimitPerCustomer() != null
-                && promotion.getUsageLimitPerCustomer() > 0
-                && order.getCustomer() != null) {
-            long customerUsedCount = couponUsageRepository
-                    .countByPromotion_IdAndCustomer_Id(
-                            promotion.getId(),
-                            order.getCustomer().getId()
-                    );
-
-            if (customerUsedCount >= promotion.getUsageLimitPerCustomer()) {
-                return false;
-            }
-        }
-
-        return true;
-    }
 
     private boolean isCouponApplicable(Coupon coupon, Order order, BigDecimal subtotal) {
         if (coupon == null || order.getCustomer() == null) {
             return false;
         }
 
-        if (Boolean.FALSE.equals(coupon.getIsActive())) {
+        if (!Boolean.TRUE.equals(coupon.getIsActive())) {
+            return false;
+        }
+
+        OffsetDateTime now = OffsetDateTime.now();
+        if (coupon.getStartDate() != null && now.isBefore(coupon.getStartDate())) {
+            return false;
+        }
+
+        if (coupon.getEndDate() != null && now.isAfter(coupon.getEndDate())) {
             return false;
         }
 
@@ -989,6 +936,10 @@ public class PosServiceImpl implements PosService {
         if (coupon.getUsageLimit() != null
                 && coupon.getUsageLimit() > 0
                 && totalUsedCount >= coupon.getUsageLimit()) {
+            return false;
+        }
+
+        if (coupon.getMinOrderValue() != null && subtotal.compareTo(coupon.getMinOrderValue()) < 0) {
             return false;
         }
 
@@ -1034,78 +985,26 @@ public class PosServiceImpl implements PosService {
                 .name(coupon.getCode())
                 .discountType(coupon.getDiscountType())
                 .discountValue(coupon.getDiscountValue())
-                .minOrderValue(BigDecimal.ZERO)
-                .maxDiscountAmount(null)
+                .minOrderValue(coupon.getMinOrderValue())
+                .maxDiscountAmount(coupon.getMaxDiscountAmount())
                 .issuedQuantity(issuedQuantity)
                 .usedCount(totalUsedCount)
                 .remainingCount(remainingCount)
                 .usedPercent(usedPercent)
                 .remainingPercent(remainingPercent)
-                .startDate(null)
-                .endDate(null)
+                .startDate(coupon.getStartDate())
+                .endDate(coupon.getEndDate())
                 .isActive(coupon.getIsActive())
                 .estimatedDiscountAmount(calculateDiscountAmount(
                         subtotal,
                         coupon.getDiscountType(),
                         coupon.getDiscountValue(),
-                        null
+                        coupon.getMaxDiscountAmount()
                 ))
                 .bestVoucher(false)
                 .build();
     }
 
-    private PosAvailableDiscountResponse mapPromotionToPosDiscountResponse(
-            Promotion promotion,
-            BigDecimal subtotal
-    ) {
-        long usedCount = couponUsageRepository.countByPromotion_Id(promotion.getId());
-
-        int issuedQuantity = promotion.getUsageLimit() != null ? promotion.getUsageLimit() : 0;
-        int remainingCount = promotion.getUsageLimit() != null
-                ? Math.max(promotion.getUsageLimit() - (int) usedCount, 0)
-                : 0;
-
-        double usedPercent = 0.0;
-        double remainingPercent = 0.0;
-
-        if (issuedQuantity > 0) {
-            usedPercent = BigDecimal.valueOf(usedCount)
-                    .multiply(BigDecimal.valueOf(100))
-                    .divide(BigDecimal.valueOf(issuedQuantity), 2, RoundingMode.HALF_UP)
-                    .doubleValue();
-
-            remainingPercent = BigDecimal.valueOf(remainingCount)
-                    .multiply(BigDecimal.valueOf(100))
-                    .divide(BigDecimal.valueOf(issuedQuantity), 2, RoundingMode.HALF_UP)
-                    .doubleValue();
-        }
-
-        return PosAvailableDiscountResponse.builder()
-                .voucherType("PROMOTION")
-                .id(promotion.getId())
-                .code(promotion.getCode())
-                .name(promotion.getName())
-                .discountType(promotion.getDiscountType())
-                .discountValue(promotion.getDiscountValue())
-                .minOrderValue(promotion.getMinOrderValue())
-                .maxDiscountAmount(promotion.getMaxDiscountAmount())
-                .issuedQuantity(issuedQuantity)
-                .usedCount(usedCount)
-                .remainingCount(remainingCount)
-                .usedPercent(usedPercent)
-                .remainingPercent(remainingPercent)
-                .startDate(promotion.getStartDate())
-                .endDate(promotion.getEndDate())
-                .isActive(promotion.getIsActive())
-                .estimatedDiscountAmount(calculateDiscountAmount(
-                        subtotal,
-                        promotion.getDiscountType(),
-                        promotion.getDiscountValue(),
-                        promotion.getMaxDiscountAmount()
-                ))
-                .bestVoucher(false)
-                .build();
-    }
 
     private BigDecimal calculateDiscountAmount(
             BigDecimal subtotal,
@@ -1141,7 +1040,7 @@ public class PosServiceImpl implements PosService {
     }
 
     private void saveVoucherUsage(Order order, PosCheckoutRequest request) {
-        if (request.getCouponId() == null && request.getPromotionId() == null) {
+        if (request.getCouponId() == null) {
             return;
         }
 
@@ -1154,12 +1053,6 @@ public class PosServiceImpl implements PosService {
             Coupon coupon = couponRepository.findById(request.getCouponId())
                     .orElseThrow(() -> new EntityNotFoundException("Không tìm thấy coupon"));
             builder.coupon(coupon);
-        }
-
-        if (request.getPromotionId() != null) {
-            Promotion promotion = promotionRepository.findById(request.getPromotionId())
-                    .orElseThrow(() -> new EntityNotFoundException("Không tìm thấy chương trình khuyến mãi"));
-            builder.promotion(promotion);
         }
 
         couponUsageRepository.save(builder.build());

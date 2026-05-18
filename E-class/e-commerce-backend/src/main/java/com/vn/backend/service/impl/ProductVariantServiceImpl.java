@@ -9,6 +9,7 @@ import com.vn.backend.entity.Product;
 import com.vn.backend.entity.ProductVariant;
 import com.vn.backend.entity.VariantAttributeValue;
 import com.vn.backend.entity.VariantAttributeValueId;
+import com.vn.backend.exception.ConflictException;
 import com.vn.backend.repository.AttributeValueRepository;
 import com.vn.backend.repository.ProductRepository;
 import com.vn.backend.repository.ProductVariantRepository;
@@ -28,8 +29,6 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
-import java.util.TreeSet;
 import java.util.stream.Collectors;
 
 @Service
@@ -324,28 +323,22 @@ public class ProductVariantServiceImpl implements ProductVariantService {
             List<AttributeValue> newValues,
             Long excludedVariantId
     ) {
-        Set<Long> newSet = newValues.stream()
+        List<Long> attributeValueIds = newValues.stream()
                 .map(AttributeValue::getId)
-                .collect(Collectors.toCollection(TreeSet::new));
+                .sorted()
+                .toList();
 
-        List<ProductVariant> existingVariants = productVariantRepository.findByProductIdWithAttributes(productId);
+        boolean duplicated = !productVariantRepository
+                .findDuplicateVariantIdsByAttributeValueIds(
+                        productId,
+                        attributeValueIds,
+                        attributeValueIds.size(),
+                        excludedVariantId
+                )
+                .isEmpty();
 
-        for (ProductVariant existing : existingVariants) {
-            if (existing.getDeletedAt() != null) {
-                continue;
-            }
-
-            if (excludedVariantId != null && excludedVariantId.equals(existing.getId())) {
-                continue;
-            }
-
-            Set<Long> existingSet = existing.getVariantAttributeValues().stream()
-                    .map(v -> v.getAttributeValue().getId())
-                    .collect(Collectors.toCollection(TreeSet::new));
-
-            if (existingSet.equals(newSet)) {
-                throw new RuntimeException("Biến thể với tổ hợp thuộc tính này đã tồn tại");
-            }
+        if (duplicated) {
+            throw new ConflictException("Biến thể này đã tồn tại.");
         }
     }
 

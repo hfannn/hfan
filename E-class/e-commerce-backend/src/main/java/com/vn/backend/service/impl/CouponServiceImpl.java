@@ -59,12 +59,15 @@ public class CouponServiceImpl implements CouponService {
                 .code(normalizedCode)
                 .discountType(normalizedDiscountType)
                 .discountValue(request.getDiscountValue())
+                .minOrderValue(defaultZero(request.getMinOrderValue()))
+                .maxDiscountAmount(request.getMaxDiscountAmount())
                 .usageLimit(request.getUsageLimit() != null ? request.getUsageLimit() : 1)
+                .startDate(request.getStartDate())
+                .endDate(request.getEndDate())
                 .isActive(request.getIsActive() != null ? request.getIsActive() : true)
                 .build();
 
-        Coupon saved = couponRepository.save(coupon);
-        return mapToResponse(saved);
+        return mapToResponse(couponRepository.save(coupon));
     }
 
     @Override
@@ -85,6 +88,10 @@ public class CouponServiceImpl implements CouponService {
         coupon.setCode(normalizedCode);
         coupon.setDiscountType(normalizedDiscountType);
         coupon.setDiscountValue(request.getDiscountValue());
+        coupon.setMinOrderValue(defaultZero(request.getMinOrderValue()));
+        coupon.setMaxDiscountAmount(request.getMaxDiscountAmount());
+        coupon.setStartDate(request.getStartDate());
+        coupon.setEndDate(request.getEndDate());
 
         if (request.getUsageLimit() != null) {
             coupon.setUsageLimit(request.getUsageLimit());
@@ -94,8 +101,7 @@ public class CouponServiceImpl implements CouponService {
             coupon.setIsActive(request.getIsActive());
         }
 
-        Coupon updated = couponRepository.save(coupon);
-        return mapToResponse(updated);
+        return mapToResponse(couponRepository.save(coupon));
     }
 
     @Override
@@ -120,15 +126,18 @@ public class CouponServiceImpl implements CouponService {
                 .toList();
     }
 
-
     private CouponResponse mapToResponse(Coupon coupon) {
         CouponResponse response = new CouponResponse();
         response.setId(coupon.getId());
         response.setCode(coupon.getCode());
         response.setDiscountType(coupon.getDiscountType());
         response.setDiscountValue(coupon.getDiscountValue());
+        response.setMinOrderValue(coupon.getMinOrderValue());
+        response.setMaxDiscountAmount(coupon.getMaxDiscountAmount());
         response.setUsageLimit(coupon.getUsageLimit());
         response.setIsActive(coupon.getIsActive());
+        response.setStartDate(coupon.getStartDate());
+        response.setEndDate(coupon.getEndDate());
         response.setCreatedAt(coupon.getCreatedAt());
 
         long usedCount = couponUsageRepository.countByCoupon_Id(coupon.getId());
@@ -152,18 +161,20 @@ public class CouponServiceImpl implements CouponService {
         response.setIssuedQuantity(issuedQuantity);
         response.setUsedCount(usedCount);
         response.setRemainingCount(remainingCount);
+        response.setRemainingUsage(remainingCount);
         response.setUsedPercent(usedPercent);
         response.setRemainingPercent(remainingPercent);
 
         return response;
     }
 
-    private String normalizeCode(String code) {
-        return code == null ? null : code.trim().toUpperCase(Locale.ROOT);
-    }
-
     private void validateRequest(CouponRequest request) {
+        String normalizedCode = normalizeCode(request.getCode());
         String normalizedDiscountType = normalizeDiscountType(request.getDiscountType());
+
+        if (normalizedCode == null || normalizedCode.isBlank()) {
+            throw new IllegalArgumentException("Mã coupon không được để trống");
+        }
 
         if (request.getDiscountValue() == null || request.getDiscountValue().compareTo(BigDecimal.ZERO) <= 0) {
             throw new IllegalArgumentException("Giá trị giảm phải lớn hơn 0");
@@ -178,12 +189,40 @@ public class CouponServiceImpl implements CouponService {
             throw new IllegalArgumentException("Giảm theo phần trăm không được lớn hơn 100");
         }
 
+        if ("PERCENTAGE".equals(normalizedDiscountType)
+                && (request.getMaxDiscountAmount() == null
+                || request.getMaxDiscountAmount().compareTo(BigDecimal.ZERO) <= 0)) {
+            throw new IllegalArgumentException("Coupon phần trăm phải có mức giảm tối đa lớn hơn 0");
+        }
+
+        if (request.getMinOrderValue() != null && request.getMinOrderValue().compareTo(BigDecimal.ZERO) < 0) {
+            throw new IllegalArgumentException("Giá trị đơn tối thiểu không được âm");
+        }
+
+        if (request.getMaxDiscountAmount() != null && request.getMaxDiscountAmount().compareTo(BigDecimal.ZERO) <= 0) {
+            throw new IllegalArgumentException("Mức giảm tối đa phải lớn hơn 0");
+        }
+
         if (request.getUsageLimit() != null && request.getUsageLimit() <= 0) {
             throw new IllegalArgumentException("Số lượng phát hành phải lớn hơn 0");
         }
+
+        if (request.getStartDate() != null
+                && request.getEndDate() != null
+                && request.getStartDate().isAfter(request.getEndDate())) {
+            throw new IllegalArgumentException("Thời gian bắt đầu không được sau thời gian kết thúc");
+        }
+    }
+
+    private String normalizeCode(String code) {
+        return code == null ? null : code.trim().toUpperCase(Locale.ROOT);
     }
 
     private String normalizeDiscountType(String discountType) {
         return discountType == null ? null : discountType.trim().toUpperCase(Locale.ROOT);
+    }
+
+    private BigDecimal defaultZero(BigDecimal value) {
+        return value == null ? BigDecimal.ZERO : value;
     }
 }
