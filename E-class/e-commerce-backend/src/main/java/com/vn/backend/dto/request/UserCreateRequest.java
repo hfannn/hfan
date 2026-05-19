@@ -36,7 +36,6 @@ public class UserCreateRequest {
     private LocalDate birthday;
 
     // ===== EMPLOYEE =====
-    @NotNull
     @PositiveOrZero
     private Double salary;
 }

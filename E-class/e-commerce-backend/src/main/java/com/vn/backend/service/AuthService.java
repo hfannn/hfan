@@ -50,12 +50,30 @@ public class AuthService {
                 roleCode
         );
     }
-
     @Transactional
     public void register(RegisterRequest request) {
         String username = request.getUsername().trim();
         String email = request.getEmail().trim().toLowerCase();
-        String phone = request.getPhone().trim();
+
+        String phone = request.getPhone() == null
+                ? null
+                : request.getPhone().trim();
+
+        if (phone != null && phone.isBlank()) {
+            phone = null;
+        }
+
+        String address = request.getAddress() == null
+                ? null
+                : request.getAddress().trim();
+
+        if (phone != null && phone.isBlank()) {
+            phone = null;
+        }
+
+        if (address != null && address.isBlank()) {
+            address = null;
+        }
 
         if (userRepository.existsByUsername(username)) {
             throw new RuntimeException("Username đã tồn tại");
@@ -65,7 +83,7 @@ public class AuthService {
             throw new RuntimeException("Email đã tồn tại");
         }
 
-        if (userProfileRepository.existsByPhone(phone)) {
+        if (phone != null && userProfileRepository.existsByPhone(phone)) {
             throw new RuntimeException("Số điện thoại đã tồn tại");
         }
 

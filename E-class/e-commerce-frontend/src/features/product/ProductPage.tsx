@@ -42,8 +42,7 @@ const ProductPage = () => {
       color: filters.color || undefined,
       material: filters.material || undefined,
       sort,
-      excludePromotion: true,
-      isSale: false,
+      
     }),
     [pagination, keyword, filters, sort],
   );
