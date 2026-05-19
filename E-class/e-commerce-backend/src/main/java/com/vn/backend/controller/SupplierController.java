@@ -29,7 +29,7 @@ public class SupplierController {
     @PutMapping("/{id}")
     public Supplier update(@PathVariable Long id, @RequestBody @Valid Supplier req) {
         Supplier s = supplierRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Supplier not found"));
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy nhà cung cấp."));
         s.setName(req.getName());
         s.setCode(req.getCode());
         s.setPhone(req.getPhone());

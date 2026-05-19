@@ -40,6 +40,7 @@ public class SecurityConfig {
 
                         .requestMatchers("/v1/auth/**", "/uploads/**", "/image/**", "/v1/chatbot/**").permitAll()
                         .requestMatchers(HttpMethod.GET,
+                                "/v1/home/**",
                                 "/v1/products/**",
                                 "/v1/brands/**",
                                 "/v1/categories/**",

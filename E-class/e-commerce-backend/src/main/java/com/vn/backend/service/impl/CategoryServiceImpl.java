@@ -38,7 +38,7 @@ public class CategoryServiceImpl implements CategoryService {
     @Override
     public CategoryResponse getCategoryById(Long id) {
         Category category = categoryRepository.findByIdActive(id)
-                .orElseThrow(() -> new RuntimeException("Category not found with id: " + id));
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy danh mục với ID: " + id));
         return mapToResponse(category);
     }
 
@@ -58,7 +58,7 @@ public class CategoryServiceImpl implements CategoryService {
     @Transactional
     public CategoryResponse updateCategory(Long id, CategoryRequest request) {
         Category category = categoryRepository.findByIdActive(id)
-                .orElseThrow(() -> new RuntimeException("Category not found with id: " + id));
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy danh mục với ID: " + id));
 
         category.setName(request.getName());
         category.setSizeChartUrl(request.getSizeChartUrl());
@@ -72,7 +72,7 @@ public class CategoryServiceImpl implements CategoryService {
     @Transactional
     public void deleteCategory(Long id) {
         Category category = categoryRepository.findByIdActive(id)
-                .orElseThrow(() -> new RuntimeException("Category not found with id: " + id));
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy danh mục với ID: " + id));
 
         category.setDeletedAt(OffsetDateTime.now());
         categoryRepository.save(category);

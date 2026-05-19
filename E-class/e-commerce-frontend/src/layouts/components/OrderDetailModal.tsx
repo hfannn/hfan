@@ -21,6 +21,10 @@ import { orderService } from "@/services/order.service";
 import { reviewService } from "@/services/review.service";
 import axios, { AxiosResponse } from "axios";
 import type { ReviewRequest } from "@/features/review/review.model";
+import {
+  formatKnownVariantAttributes,
+  normalizeProductAttributeText,
+} from "@/utils/productAttributeLabel";
 
 const { Title, Text } = Typography;
 
@@ -119,7 +123,7 @@ const resolveImageUrl = (imageUrl?: string) => {
     return imageUrl;
   }
 
-  return `http://localhost:8080/api${imageUrl}`;
+  return `${import.meta.env.VITE_API_BASE_URL || "http://localhost:8081/api"}${imageUrl}`;
 };
 
 const getStatusMeta = (status: string) => {
@@ -244,32 +248,37 @@ const OrderDetailModal = ({
       title: "Sản phẩm",
       dataIndex: "productName",
       key: "productName",
-      render: (text: string, record: OrderItem) => (
-        <div style={{ display: "flex", alignItems: "center" }}>
-          <Image
-            width={60}
-            src={resolveImageUrl(record.productImage || record.imageUrl)}
-            fallback="https://via.placeholder.com/60"
-            preview={false}
-            style={{ marginRight: 12, borderRadius: 8, objectFit: "cover" }}
-          />
-          <div>
-            <Text strong>{text}</Text>
-            <br />
-            <Text type="secondary">{record.variantInfo}</Text>
-            {(record.size || record.color || record.material) && (
-              <>
-                <br />
-                <Text type="secondary" style={{ fontSize: 12 }}>
-                  {[record.size, record.color, record.material]
-                    .filter(Boolean)
-                    .join(" / ")}
-                </Text>
-              </>
-            )}
+      render: (text: string, record: OrderItem) => {
+        const variantText =
+          formatKnownVariantAttributes({
+            color: record.color,
+            size: record.size,
+            material: record.material,
+          }) || normalizeProductAttributeText(record.variantInfo);
+
+        return (
+          <div style={{ display: "flex", alignItems: "center" }}>
+            <Image
+              width={60}
+              src={resolveImageUrl(record.productImage || record.imageUrl)}
+              fallback="https://via.placeholder.com/60"
+              preview={false}
+              style={{ marginRight: 12, borderRadius: 8, objectFit: "cover" }}
+            />
+            <div>
+              <Text strong>{text}</Text>
+              {variantText && (
+                <>
+                  <br />
+                  <Text type="secondary" style={{ fontSize: 12 }}>
+                    {variantText}
+                  </Text>
+                </>
+              )}
+            </div>
           </div>
-        </div>
-      ),
+        );
+      },
     },
     {
       title: "Đơn giá",
@@ -521,9 +530,11 @@ const OrderDetailModal = ({
                 <Text strong>{reviewingItem.productName}</Text>
                 <br />
                 <Text type="secondary">
-                  {[reviewingItem.size, reviewingItem.color, reviewingItem.material]
-                    .filter(Boolean)
-                    .join(" / ") || reviewingItem.variantInfo}
+                  {formatKnownVariantAttributes({
+                    color: reviewingItem.color,
+                    size: reviewingItem.size,
+                    material: reviewingItem.material,
+                  }) || reviewingItem.variantInfo}
                 </Text>
               </div>
             </Space>

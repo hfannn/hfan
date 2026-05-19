@@ -1,4 +1,4 @@
-export const API_FILE_BASE_URL = "http://localhost:8080/api";
+export const API_FILE_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8081/api";
 
 export const resolveImageUrl = (url?: string | null) => {
   if (!url) return "";

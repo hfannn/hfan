@@ -58,7 +58,7 @@ const ChatbotWidget = ({ channel = "WEB_USER" }: ChatbotWidgetProps) => {
     }
 
     return [
-      "Nike size 42 còn hàng không?",
+      "Nike kích cỡ 42 còn hàng không?",
       "Shop đang có ưu đãi gì?",
       "Đơn hàng của tôi đang ở đâu?",
     ];

@@ -1,51 +1,59 @@
-import { useEffect, useState } from "react";
-import {
-  Button,
-  Col,
-  Divider,
-  Empty,
-  Layout,
-  Menu,
-  Pagination,
-  Row,
-  Space,
-  Spin,
-  Typography,
-  message,
-} from "antd";
-import { ClearOutlined } from "@ant-design/icons";
+import { Col, Empty, Pagination, Row, Space, Spin, Typography, message } from "antd";
+import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import ProductListDisplay from "./Products";
 import { productService } from "@/services/product.service";
 import { PageResponse, ProductList as ProductItem } from "./product.model";
+import FilterSidebar, { ProductFilters } from "./components/FilterSidebar";
+import PageToolbar from "./components/PageToolbar";
 
-const { Content, Sider } = Layout;
 const { Text, Title } = Typography;
+
+const saleSortOptions = [
+  { value: "discountDesc", label: "Giảm giá cao nhất" },
+  { value: "newest", label: "Mới nhất" },
+  { value: "priceAsc", label: "Giá tăng dần" },
+  { value: "priceDesc", label: "Giá giảm dần" },
+];
 
 const PromotionsPage = () => {
   const [products, setProducts] = useState<PageResponse<ProductItem>>();
   const [categories, setCategories] = useState<any[]>([]);
   const [brands, setBrands] = useState<any[]>([]);
+  const [sizes, setSizes] = useState<any[]>([]);
+  const [colors, setColors] = useState<any[]>([]);
+  const [materials, setMaterials] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
-  const [filters, setFilters] = useState<{
-    categoryId?: number | null;
-    brandId?: number | null;
-  }>({
-    categoryId: null,
-    brandId: null,
-  });
-  const [pagination, setPagination] = useState({ current: 1, pageSize: 12 });
+  const [searchParams] = useSearchParams();
+  const keyword = (searchParams.get("search") || searchParams.get("keyword") || "").trim();
+  const [filters, setFilters] = useState<ProductFilters>({});
+  const [pagination, setPagination] = useState({ current: 1, pageSize: 8 });
+  const [sort, setSort] = useState("discountDesc");
+
+  const requestParams = useMemo(
+    () => ({
+      page: pagination.current - 1,
+      size: pagination.pageSize,
+      keyword: keyword || undefined,
+      categoryId: filters.categoryId || undefined,
+      brandId: filters.brandId || undefined,
+      minSalePrice: filters.minPrice || undefined,
+      maxSalePrice: filters.maxPrice || undefined,
+      discountMin: filters.discountMin || undefined,
+      discountMax: filters.discountMax || undefined,
+      sizeValue: filters.size || undefined,
+      color: filters.color || undefined,
+      material: filters.material || undefined,
+      sort,
+    }),
+    [pagination, keyword, filters, sort],
+  );
 
   useEffect(() => {
     const fetchProducts = async () => {
       setLoading(true);
       try {
-        const res = await productService.filterProducts({
-          page: pagination.current - 1,
-          size: pagination.pageSize,
-          isSale: true,
-          categoryId: filters.categoryId,
-          brandId: filters.brandId,
-        });
+        const res = await productService.getPromotionProducts(requestParams);
         setProducts(res.data);
       } catch (error: any) {
         message.error(
@@ -58,17 +66,27 @@ const PromotionsPage = () => {
     };
 
     fetchProducts();
-  }, [filters, pagination]);
+  }, [requestParams]);
+
+  useEffect(() => {
+    setPagination((prev) => ({ ...prev, current: 1 }));
+  }, [keyword]);
 
   useEffect(() => {
     const fetchOptions = async () => {
       try {
-        const [categoryRes, brandRes] = await Promise.all([
+        const [categoryRes, brandRes, sizeRes, colorRes, materialRes] = await Promise.all([
           productService.getCategories(),
           productService.getBrands(),
+          productService.getSizes(),
+          productService.getColors(),
+          productService.getMaterials(),
         ]);
         setCategories(categoryRes.data || []);
         setBrands(brandRes.data || []);
+        setSizes(sizeRes.data || []);
+        setColors(colorRes.data || []);
+        setMaterials(materialRes.data || []);
       } catch {
         message.error("Không thể tải bộ lọc sản phẩm.");
       }
@@ -77,124 +95,75 @@ const PromotionsPage = () => {
     fetchOptions();
   }, []);
 
-  const handleCategoryChange = (categoryId: any) => {
-    setFilters((prev) => ({ ...prev, categoryId }));
+  const updateFilters = (patch: Partial<ProductFilters>) => {
+    setFilters((prev) => ({ ...prev, ...patch }));
     setPagination((prev) => ({ ...prev, current: 1 }));
   };
 
-  const handleBrandChange = (brandId: any) => {
-    setFilters((prev) => ({ ...prev, brandId }));
+  const resetFilters = () => {
+    setFilters({});
     setPagination((prev) => ({ ...prev, current: 1 }));
   };
 
-  const handleResetFilters = () => {
-    setFilters({ categoryId: null, brandId: null });
-    setPagination((prev) => ({ ...prev, current: 1 }));
-  };
-
-  const hasActiveFilter = Boolean(filters.categoryId || filters.brandId);
+  const shown = products?.content?.length || 0;
 
   return (
     <Space direction="vertical" size={20} style={{ width: "100%" }}>
-      <div className="app-section" style={{ padding: 24 }}>
-        <Title level={2} style={{ margin: 0 }}>
-          Sản phẩm khuyến mãi
-        </Title>
-        <Text type="secondary">
-          
-        </Text>
+      <div className="page-title-block">
+        <Title level={2}>Sản phẩm khuyến mãi</Title>
+        <Text type="secondary">Săn ưu đãi hấp dẫn cho những mẫu giày chất lượng</Text>
       </div>
 
-      <Layout style={{ background: "transparent" }}>
-        <Row gutter={[20, 20]} style={{ width: "100%", margin: 0 }}>
-          <Col xs={24} lg={6} xl={5}>
-            <Sider
-              width="100%"
-              className="app-section"
-              style={{
-                background: "#fff",
-                height: "auto",
-                padding: 20,
-              }}
-            >
-              <Space
-                align="center"
-                style={{ justifyContent: "space-between", width: "100%" }}
-              >
-                <Title level={4} style={{ margin: 0 }}>
-                  Bộ lọc
-                </Title>
-                <Button
-                  type="text"
-                  icon={<ClearOutlined />}
-                  onClick={handleResetFilters}
-                  disabled={!hasActiveFilter}
-                >
-                  Xóa
-                </Button>
-              </Space>
+      <Row gutter={[16, 16]}>
+        <Col xs={24} lg={6}>
+          <FilterSidebar
+            filters={filters}
+            categories={categories}
+            brands={brands}
+            sizes={sizes}
+            colors={colors}
+            materials={materials}
+            saleMode
+            onChange={updateFilters}
+            onReset={resetFilters}
+          />
+        </Col>
+        <Col xs={24} lg={18}>
+          <div className="product-list-panel">
+            <Spin spinning={loading}>
+              <Space direction="vertical" size={18} style={{ width: "100%" }}>
+                <PageToolbar
+                  shown={shown}
+                  total={products?.totalElements || 0}
+                  sort={sort}
+                  pageSize={pagination.pageSize}
+                  sortOptions={saleSortOptions}
+                  onSortChange={(value) => {
+                    setSort(value);
+                    setPagination((prev) => ({ ...prev, current: 1 }));
+                  }}
+                  onPageSizeChange={(pageSize) => setPagination({ current: 1, pageSize })}
+                />
 
-              <Divider />
-
-              <Title level={5}>Danh mục</Title>
-              <Menu
-                onClick={(e) =>
-                  handleCategoryChange(e.key === "all" ? null : Number(e.key))
-                }
-                selectedKeys={filters.categoryId ? [String(filters.categoryId)] : ["all"]}
-                mode="inline"
-                style={{ border: "none", background: "transparent" }}
-                items={[
-                  { key: "all", label: "Tất cả" },
-                  ...categories.map((cat) => ({ key: cat.id, label: cat.name })),
-                ]}
-              />
-
-              <Divider />
-
-              <Title level={5}>Thương hiệu</Title>
-              <Menu
-                onClick={(e) =>
-                  handleBrandChange(e.key === "all" ? null : Number(e.key))
-                }
-                selectedKeys={filters.brandId ? [String(filters.brandId)] : ["all"]}
-                mode="inline"
-                style={{ border: "none", background: "transparent" }}
-                items={[
-                  { key: "all", label: "Tất cả" },
-                  ...brands.map((brand) => ({ key: brand.id, label: brand.name })),
-                ]}
-              />
-            </Sider>
-          </Col>
-
-          <Col xs={24} lg={18} xl={19}>
-            <Content className="app-section" style={{ padding: 24 }}>
-              <Spin spinning={loading}>
-                {products && products.content.length > 0 ? (
-                  <Space direction="vertical" size={20} style={{ width: "100%" }}>
-                    <ProductListDisplay products={products.content} hideTitle />
-                    <Pagination
-                      align="center"
-                      current={pagination.current}
-                      pageSize={pagination.pageSize}
-                      total={products.totalElements}
-                      showSizeChanger
-                      onChange={(page, pageSize) =>
-                        setPagination({ current: page, pageSize })
-                      }
-                    />
-                  </Space>
+                {shown > 0 ? (
+                  <ProductListDisplay products={products?.content || []} hideTitle mode="sale" />
                 ) : (
-                  !loading && (
-                    <Empty description="Không tìm thấy sản phẩm khuyến mãi nào" />
-                  )
+                  !loading && <Empty description="Hiện chưa có sản phẩm khuyến mãi." />
                 )}
-              </Spin>
-            </Content>
-          </Col>
-        </Row>
-      </Layout>
+
+                <Pagination
+                  align="center"
+                  current={pagination.current}
+                  pageSize={pagination.pageSize}
+                  total={products?.totalElements || 0}
+                  showSizeChanger={false}
+                  onChange={(page) => setPagination((prev) => ({ ...prev, current: page }))}
+                />
+              </Space>
+            </Spin>
+          </div>
+        </Col>
+      </Row>
     </Space>
   );
 };

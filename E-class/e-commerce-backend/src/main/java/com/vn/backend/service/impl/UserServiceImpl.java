@@ -221,7 +221,7 @@ public class UserServiceImpl implements UserService {
     public UserDetailResponse getUserById(Long id) {
 
         User user = userRepository.findDetailById(id)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy người dùng."));
 
         UserDetailResponse res = new UserDetailResponse();
 

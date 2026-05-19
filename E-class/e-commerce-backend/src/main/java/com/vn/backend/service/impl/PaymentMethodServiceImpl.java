@@ -39,7 +39,7 @@ public class PaymentMethodServiceImpl implements PaymentMethodService {
     @Transactional
     public PaymentMethodResponse update(Long id, PaymentMethodRequest request) {
         PaymentMethod entity = repository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("PaymentMethod not found with id: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy phương thức thanh toán với ID: " + id));
         entity.setCode(request.getCode());
         entity.setName(request.getName());
         entity.setIsActive(request.getIsActive());

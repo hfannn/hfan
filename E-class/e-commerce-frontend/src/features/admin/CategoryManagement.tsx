@@ -80,7 +80,7 @@ export default function CategoryManagementPage() {
     { title: "ID", dataIndex: "id", width: 80 },
     { title: "Tên danh mục", dataIndex: "name" },
     {
-      title: "Bảng size",
+      title: "Bảng kích cỡ",
       dataIndex: "sizeChartUrl",
       render: (v: string) =>
         v ? (
@@ -169,7 +169,7 @@ export default function CategoryManagementPage() {
             <Input placeholder="Ví dụ: Giày Sneaker" />
           </Form.Item>
 
-          <Form.Item name="sizeChartUrl" label="Size chart URL (tuỳ chọn)">
+          <Form.Item name="sizeChartUrl" label="URL bảng kích cỡ (tuỳ chọn)">
             <Input placeholder="https://..." />
           </Form.Item>
         </Form>

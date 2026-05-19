@@ -1,5 +1,6 @@
 package com.vn.backend.repository;
 
+import com.vn.backend.dto.response.BestSellerProductRow;
 import com.vn.backend.dto.response.statistics.OverviewStatisticsProjection;
 import com.vn.backend.dto.response.statistics.TopProductResponse;
 import com.vn.backend.entity.Order;
@@ -342,6 +343,32 @@ public interface StatisticsRepository extends JpaRepository<Order, Integer> {
             @Param("orderType") String orderType,
             Pageable pageable
     );
+
+    @Query(value = """
+        WITH paid_orders AS (
+            SELECT DISTINCT p.order_id
+            FROM payments p
+            JOIN orders o ON o.id = p.order_id
+            WHERE p.status = 'PAID'
+              AND UPPER(COALESCE(o.status, '')) NOT IN ('CANCELLED', 'FAILED', 'REFUNDED', 'PENDING_PAYMENT')
+        )
+        SELECT
+            pr.id AS productId,
+            COALESCE(SUM(oi.quantity), 0) AS soldQuantity
+        FROM order_items oi
+        JOIN orders o ON o.id = oi.order_id
+        JOIN paid_orders po ON po.order_id = o.id
+        JOIN product_variants pv ON pv.id = oi.product_variant_id
+        JOIN products pr ON pr.id = pv.product_id
+        WHERE pr.deleted_at IS NULL
+          AND pr.is_active = true
+          AND pv.deleted_at IS NULL
+          AND pv.is_active = true
+        GROUP BY pr.id
+        ORDER BY soldQuantity DESC, pr.id DESC
+        LIMIT :limit
+    """, nativeQuery = true)
+    List<BestSellerProductRow> getPublicBestSellerProductRows(@Param("limit") int limit);
 
     @Query(value = """
         WITH paid_orders AS (

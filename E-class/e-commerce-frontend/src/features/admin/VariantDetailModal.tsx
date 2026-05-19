@@ -20,6 +20,7 @@
 } from "antd";
 import { useState, useEffect, useMemo } from "react";
 import { EditOutlined, DeleteOutlined, PlusOutlined } from "@ant-design/icons";
+import { getProductAttributeLabel } from "@/utils/productAttributeLabel";
 import { productService } from "@/services/product.service";
 
 export interface ProductVariantAttributes {
@@ -507,7 +508,7 @@ const VariantDetailModal: React.FC<VariantDetailModalProps> = ({
         <Space wrap size={[4, 4]}>
           {Object.entries(attrs || {}).map(([key, value]) => (
             <Tag key={key}>
-              {key}: {value}
+              {getProductAttributeLabel(key)}: {value}
             </Tag>
           ))}
         </Space>
@@ -641,7 +642,7 @@ const VariantDetailModal: React.FC<VariantDetailModalProps> = ({
                 <Col xs={24} md={9}>
                   <Input.Search
                     allowClear
-                    placeholder="Loc SKU, mau, size, chat lieu..."
+                    placeholder="Lọc SKU, màu sắc, kích cỡ, chất liệu..."
                     value={variantKeyword}
                     onChange={(e) => setVariantKeyword(e.target.value)}
                     onSearch={(value) => setVariantKeyword(value)}

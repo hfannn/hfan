@@ -24,22 +24,15 @@ public interface CouponRepository extends JpaRepository<Coupon, Long> {
         SELECT c
         FROM Coupon c
         WHERE c.isActive = true
-          AND (c.startDate IS NULL OR c.startDate <= CURRENT_TIMESTAMP)
-          AND (c.endDate IS NULL OR c.endDate >= CURRENT_TIMESTAMP)
-          AND (
-                c.usageLimit IS NULL
-                OR (
-                    SELECT COUNT(cu)
-                    FROM CouponUsage cu
-                    WHERE cu.coupon.id = c.id
-                ) < c.usageLimit
-          )
-          AND NOT EXISTS (
-                SELECT cu
-                FROM CouponUsage cu
-                WHERE cu.coupon.id = c.id
-                  AND cu.customer.id = :customerId
-          )
+        ORDER BY c.createdAt DESC
+    """)
+    List<Coupon> findAvailableCoupons();
+
+    @Query("""
+        SELECT c
+        FROM Coupon c
+        WHERE c.isActive = true
+          AND (:customerId IS NULL OR :customerId IS NOT NULL)
         ORDER BY c.createdAt DESC
     """)
     List<Coupon> findAvailableCouponsForCustomer(@Param("customerId") Long customerId);

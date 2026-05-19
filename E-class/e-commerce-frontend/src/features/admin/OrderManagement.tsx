@@ -64,6 +64,8 @@ interface Order {
   status: string;
   createdAt: string;
   orderType?: string | null;
+  inventoryReserved?: boolean;
+  inventoryReleased?: boolean;
 }
 
 type OrderTypeLabel = "Online" | "Tại quầy";
@@ -233,6 +235,16 @@ const OrderManagementPage = () => {
     return <Tag color={label === "Tại quầy" ? "blue" : "geekblue"}>{label}</Tag>;
   };
 
+  const getConfirmDescription = (order: Order) => {
+    if (normalizeOrderType(order.orderType) !== "ONLINE") {
+      return "Đơn sẽ chuyển sang Đã xác nhận.";
+    }
+
+    return order.inventoryReserved
+      ? "Đơn sẽ chuyển sang Đã xác nhận. Tồn kho đã được trừ/giữ khi khách hoàn tất đặt hàng."
+      : "Đơn sẽ chuyển sang Đã xác nhận. Hệ thống sẽ kiểm tra tồn kho cho đơn chưa được giữ kho.";
+  };
+
   const normalizedKeyword = searchText.trim().toLowerCase();
 
   const baseFilteredOrders = useMemo(() => {
@@ -387,7 +399,7 @@ const OrderManagementPage = () => {
           <Popconfirm
             key="confirm"
             title="Xác nhận đơn hàng này?"
-            description="Đơn sẽ chuyển sang Đã xác nhận và hệ thống sẽ trừ tồn kho."
+            description={getConfirmDescription(record)}
             onConfirm={() => handleUpdateStatus(record.id, "CONFIRMED")}
             okText="Xác nhận"
             cancelText="Hủy"

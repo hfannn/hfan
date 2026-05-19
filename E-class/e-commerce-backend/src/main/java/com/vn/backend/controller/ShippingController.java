@@ -32,7 +32,7 @@ public class ShippingController {
         BigDecimal subTotal = request.getItems().stream()
                 .map(item -> {
                     ProductVariant variant = productVariantRepository.findById(item.getVariantId())
-                            .orElseThrow(() -> new RuntimeException("Variant not found"));
+                            .orElseThrow(() -> new RuntimeException("Không tìm thấy biến thể sản phẩm."));
                     ProductPriceResponse price = productPriceService.calculateCurrentPrice(variant);
                     return price.getUnitPrice().multiply(BigDecimal.valueOf(item.getQuantity()));
                 })

@@ -39,7 +39,7 @@ public class DiscountServiceImpl implements DiscountService {
     @Override
     public ValidateDiscountResponse validateDiscount(ValidateDiscountRequest request, CustomUserDetails userDetails) {
         if (request.getItems() == null || request.getItems().isEmpty()) {
-            throw new InvalidRequestException("Danh sach san pham la bat buoc khi xem truoc voucher.");
+            throw new InvalidRequestException("Danh sách sản phẩm là bắt buộc khi xem trước mã giảm giá.");
         }
 
         BigDecimal subtotalBeforeVoucher = calculateSubtotalBeforeVoucher(request.getItems());
@@ -53,17 +53,17 @@ public class DiscountServiceImpl implements DiscountService {
             CustomUserDetails userDetails
     ) {
         if (userDetails == null) {
-            throw new InvalidRequestException("Ban can dang nhap de su dung voucher.");
+            throw new InvalidRequestException("Bạn cần đăng nhập để sử dụng mã giảm giá.");
         }
 
         if (code == null || code.isBlank()) {
-            throw new InvalidRequestException("Ma giam gia khong duoc de trong.");
+            throw new InvalidRequestException("Mã giảm giá không được để trống.");
         }
 
         String normalizedCode = normalizeCode(code);
         Customer customer = resolveCustomer(userDetails.getUserId());
         Coupon coupon = couponRepository.findByCode(normalizedCode)
-                .orElseThrow(() -> new InvalidRequestException("Ma giam gia khong ton tai."));
+                .orElseThrow(() -> new InvalidRequestException("Mã giảm giá không tồn tại."));
         return validateCoupon(coupon, customer, defaultZero(subtotal));
     }
 
@@ -77,29 +77,36 @@ public class DiscountServiceImpl implements DiscountService {
         OffsetDateTime now = OffsetDateTime.now();
 
         if (!Boolean.TRUE.equals(coupon.getIsActive())) {
-            throw new InvalidRequestException("Ma giam gia da bi vo hieu hoa.");
+            throw new InvalidRequestException("Mã giảm giá đã bị vô hiệu hóa.");
         }
 
         if (coupon.getStartDate() != null && now.isBefore(coupon.getStartDate())) {
-            throw new InvalidRequestException("Ma giam gia chua den thoi gian su dung.");
+            throw new InvalidRequestException("Mã giảm giá chưa đến thời gian sử dụng.");
         }
 
         if (coupon.getEndDate() != null && now.isAfter(coupon.getEndDate())) {
-            throw new InvalidRequestException("Ma giam gia da het han.");
+            throw new InvalidRequestException("Mã giảm giá đã hết hạn.");
         }
 
-        long totalUsage = couponUsageRepository.countByCoupon_Id(coupon.getId());
+        long totalUsage = couponUsageRepository.countValidUsagesByCouponId(coupon.getId());
         if (coupon.getUsageLimit() != null && coupon.getUsageLimit() > 0 && totalUsage >= coupon.getUsageLimit()) {
-            throw new InvalidRequestException("Ma giam gia da het luot su dung.");
+            throw new InvalidRequestException("Mã giảm giá đã hết lượt sử dụng.");
+        }
+
+        if (coupon.getDiscountValue() == null || coupon.getDiscountValue().compareTo(BigDecimal.ZERO) <= 0) {
+            throw new InvalidRequestException("Giá trị giảm không hợp lệ.");
+        }
+
+        String normalizedDiscountType = coupon.getDiscountType() == null
+                ? ""
+                : coupon.getDiscountType().trim().toUpperCase(Locale.ROOT);
+        if (("PERCENTAGE".equals(normalizedDiscountType) || "PERCENT".equals(normalizedDiscountType))
+                && coupon.getDiscountValue().compareTo(BigDecimal.valueOf(100)) > 0) {
+            throw new InvalidRequestException("Giá trị giảm phần trăm không hợp lệ.");
         }
 
         if (coupon.getMinOrderValue() != null && subtotal.compareTo(coupon.getMinOrderValue()) < 0) {
-            throw new InvalidRequestException("Don hang chua dat gia tri toi thieu de ap dung ma giam gia.");
-        }
-
-        long customerUsage = couponUsageRepository.countByCoupon_IdAndCustomer_Id(coupon.getId(), customer.getId());
-        if (customerUsage > 0) {
-            throw new InvalidRequestException("Ban da su dung ma giam gia nay roi.");
+            throw new InvalidRequestException("Đơn hàng chưa đạt giá trị tối thiểu.");
         }
 
         BigDecimal discountAmount = calculateDiscount(
@@ -131,12 +138,12 @@ public class DiscountServiceImpl implements DiscountService {
 
         BigDecimal discount = BigDecimal.ZERO;
 
-        if ("PERCENTAGE".equalsIgnoreCase(type)) {
+        if ("PERCENTAGE".equalsIgnoreCase(type) || "PERCENT".equalsIgnoreCase(type)) {
             discount = subtotal.multiply(value).divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
             if (maxValue != null && discount.compareTo(maxValue) > 0) {
                 discount = maxValue;
             }
-        } else if ("FIXED_AMOUNT".equalsIgnoreCase(type)) {
+        } else if ("FIXED_AMOUNT".equalsIgnoreCase(type) || "FIXED".equalsIgnoreCase(type)) {
             discount = value;
         }
 
@@ -162,10 +169,10 @@ public class DiscountServiceImpl implements DiscountService {
 
     private Customer resolveCustomer(Long userId) {
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new InvalidRequestException("User not found"));
+                .orElseThrow(() -> new InvalidRequestException("Không tìm thấy người dùng."));
 
         return customerRepository.findByUserProfileId(user.getUserProfile().getId())
-                .orElseThrow(() -> new InvalidRequestException("Customer not found"));
+                .orElseThrow(() -> new InvalidRequestException("Không tìm thấy khách hàng."));
     }
 
     private String normalizeCode(String code) {

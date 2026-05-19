@@ -33,12 +33,17 @@ const CustomHeader = () => {
 
   const handleSearch = (value: string) => {
     const keyword = value.trim();
+    const isPromotionRoute =
+      location.pathname.startsWith("/promotions") ||
+      location.pathname.startsWith("/san-pham-khuyen-mai");
+
     if (!keyword) {
-      navigate("/products");
+      navigate(isPromotionRoute ? "/promotions" : "/products");
       return;
     }
 
-    navigate(`/products?search=${encodeURIComponent(keyword)}`);
+    const targetPath = isPromotionRoute ? "/promotions" : "/products";
+    navigate(`${targetPath}?search=${encodeURIComponent(keyword)}`);
   };
 
   const handleUserMenuClick = ({ key }: { key: string }) => {
@@ -48,6 +53,12 @@ const CustomHeader = () => {
       navigate("/");
     }
   };
+
+  const selectedMenuKey = location.pathname.startsWith("/san-pham-khuyen-mai")
+    ? "/promotions"
+    : location.pathname.startsWith("/products")
+      ? "/products"
+      : location.pathname;
 
   const userMenuItems = isAuthenticated
     ? [
@@ -120,7 +131,7 @@ const CustomHeader = () => {
           >
             <Menu
               mode="horizontal"
-              selectedKeys={[location.pathname]}
+              selectedKeys={[selectedMenuKey]}
               onClick={({ key }) => navigate(key)}
               style={{
                 background: "transparent",

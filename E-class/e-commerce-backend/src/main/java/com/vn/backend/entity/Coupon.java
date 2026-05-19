@@ -35,7 +35,7 @@ public class Coupon {
     private BigDecimal maxDiscountAmount;
 
     @Column(name = "usage_limit")
-    private Integer usageLimit = 1;
+    private Integer usageLimit;
 
     @Column(name = "start_date")
     private OffsetDateTime startDate;

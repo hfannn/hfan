@@ -290,7 +290,7 @@ const PromotionManagementPage = () => {
               </Checkbox.Group>
             </div>
             <Text type="secondary">
-              Đã chọn {selectedProductIds.length} sản phẩm. Backend sẽ áp dụng vào các biến thể đang bán của từng sản phẩm.
+              Đã chọn {selectedProductIds.length} sản phẩm. Áp dụng vào các biến thể đang bán của từng sản phẩm.
             </Text>
           </Space>
         </Form>

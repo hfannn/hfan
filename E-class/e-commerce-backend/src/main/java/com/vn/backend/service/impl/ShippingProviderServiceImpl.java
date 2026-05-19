@@ -36,7 +36,7 @@ public class ShippingProviderServiceImpl implements ShippingProviderService {
     @Override
     public ShippingProviderResponse getShippingProviderById(Long id) {
         ShippingProvider provider = shippingProviderRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Shipping provider not found with id: " + id));
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy đơn vị vận chuyển với ID: " + id));
         return mapToResponse(provider);
     }
 
@@ -56,7 +56,7 @@ public class ShippingProviderServiceImpl implements ShippingProviderService {
     @Transactional
     public ShippingProviderResponse updateShippingProvider(Long id, ShippingProviderRequest request) {
         ShippingProvider provider = shippingProviderRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Shipping provider not found with id: " + id));
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy đơn vị vận chuyển với ID: " + id));
 
         provider.setCode(request.getCode());
         provider.setName(request.getName());
@@ -70,7 +70,7 @@ public class ShippingProviderServiceImpl implements ShippingProviderService {
     @Transactional
     public void deleteShippingProvider(Long id) {
         ShippingProvider provider = shippingProviderRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Shipping provider not found with id: " + id));
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy đơn vị vận chuyển với ID: " + id));
 
         shippingProviderRepository.delete(provider);
     }

@@ -19,6 +19,24 @@ export interface ProductList {
   imageUrl: string;
 }
 
+export interface HomeProduct {
+  productId: number;
+  name: string;
+  imageUrl?: string;
+  price?: number;
+  originalPrice?: number;
+  salePrice?: number;
+  discountPercent?: number;
+  soldQuantity?: number;
+  isPromotionActive?: boolean;
+}
+
+export interface HomeResponse {
+  featuredProducts: HomeProduct[];
+  promotionProducts: HomeProduct[];
+  bestSellerProducts: HomeProduct[];
+}
+
 export interface PageResponse<T> {
   content: T[];
   page: number;

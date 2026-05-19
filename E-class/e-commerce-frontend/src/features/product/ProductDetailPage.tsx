@@ -18,8 +18,6 @@ import {
 import {
   ShoppingCartOutlined,
   ArrowLeftOutlined,
-  HeartOutlined,
-  HeartFilled,
   SafetyOutlined,
   SyncOutlined,
   TruckOutlined,
@@ -27,7 +25,6 @@ import {
 import { productService } from "@/services/product.service";
 import { cartService } from "@/services/cart.service";
 import { useAuth } from "@/services/AuthContext";
-import apiClient from "@/services/api";
 import { ProductDetail, Variant } from "../admin/VariantDetailModal";
 import { PageResponse, ProductList } from "./product.model";
 import { resolveImageUrl } from "@/utils/utils";
@@ -308,8 +305,8 @@ const ProductDetailPage = () => {
     if (!selectedVariant) {
       message.warning(
         hasMaterialOptions
-          ? "Vui lòng chọn đầy đủ size, màu sắc và chất liệu"
-          : "Vui lòng chọn đầy đủ size và màu sắc",
+          ? "Vui lòng chọn đầy đủ kích cỡ, màu sắc và chất liệu"
+          : "Vui lòng chọn đầy đủ kích cỡ và màu sắc",
       );
       return;
     }
@@ -365,8 +362,8 @@ const ProductDetailPage = () => {
     selectedSize && selectedColor && (!hasMaterialOptions || selectedMaterial),
   );
   const selectionHint = hasMaterialOptions
-    ? "Vui lòng chọn size, màu sắc và chất liệu để xem tồn kho"
-    : "Vui lòng chọn size và màu sắc để xem tồn kho";
+    ? "Vui lòng chọn kích cỡ, màu sắc và chất liệu để xem tồn kho"
+    : "Vui lòng chọn kích cỡ và màu sắc để xem tồn kho";
   const selectedStock = getVariantStock(selectedVariant);
   const isOutOfStock = !selectedVariant || selectedStock <= 0;
   const isLowStock =
@@ -502,8 +499,8 @@ const ProductDetailPage = () => {
                 </Space>
               ) : (
                 hasMaterialOptions
-                  ? "Chọn Size, Màu và Chất liệu để xem giá"
-                  : "Chọn Size và Màu để xem giá"
+                  ? "Chọn kích cỡ, màu sắc và chất liệu để xem giá"
+                  : "Chọn kích cỡ và màu sắc để xem giá"
               )}
             </Title>
 
@@ -550,7 +547,7 @@ const ProductDetailPage = () => {
             <Divider />
 
             <div>
-              <Text strong>Size:</Text>
+              <Text strong>Kích cỡ:</Text>
               <Space wrap style={{ marginTop: 8, marginBottom: 16 }}>
                 {allSizes.map((size) => (
                   <Button
@@ -604,15 +601,6 @@ const ProductDetailPage = () => {
               </div>
             )}
 
-            <div style={{ marginTop: 8 }}>
-              <Text strong>Thêm vào yêu thích:</Text>
-              <Space style={{ marginLeft: 12 }}>
-                <FavoriteButton productId={product.id} />
-              </Space>
-            </div>
-
-            <Divider />
-
             <div>
               <Text strong>Mô tả sản phẩm:</Text>
               <ul style={{ paddingLeft: "20px", marginTop: "8px" }}>
@@ -662,8 +650,8 @@ const ProductDetailPage = () => {
 
             <Row gutter={[12, 12]}>
               {[
-                [<TruckOutlined />, "Miễn phí vận chuyển", "Đơn hàng từ 500.000đ"],
-                [<SyncOutlined />, "Đổi trả dễ dàng", "Trong 7 ngày"],
+                [<TruckOutlined />, "Vận chuyển nhanh", "Vận chuyển 63 tỉnh thành"],
+                [<SyncOutlined />, "Bảo hành sản phẩm", "Lỗi 1 đổi 1"],
                 [<SafetyOutlined />, "Thanh toán an toàn", "Hỗ trợ nhiều hình thức"],
               ].map(([icon, title, desc]) => (
                 <Col xs={24} sm={8} key={String(title)}>
@@ -740,87 +728,3 @@ const SuggestedProducts = ({
 };
 
 export default ProductDetailPage;
-
-const FavoriteButton = ({ productId }: { productId: number }) => {
-  const { isAuthenticated } = useAuth();
-  const [loading, setLoading] = useState(false);
-  const [isFavorite, setIsFavorite] = useState(false);
-
-  useEffect(() => {
-    let mounted = true;
-
-    const fetchFavorite = async () => {
-      if (!isAuthenticated) {
-        setIsFavorite(false);
-        return;
-      }
-
-      setLoading(true);
-      try {
-        const res = await apiClient.get(`/v1/favorites/${productId}/check`);
-        if (!mounted) return;
-        // Kiểm tra nếu response.data = true thì set isFavorite = true
-        setIsFavorite(res.data === true);
-      } catch (err: any) {
-        if (!mounted) return;
-        // Nếu 404 hoặc lỗi khác, coi như chưa thích
-        setIsFavorite(false);
-        if (err?.response?.status !== 404) {
-          console.error('fetch favorite error', err);
-        }
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    };
-
-    fetchFavorite();
-
-    return () => {
-      mounted = false;
-    };
-  }, [productId, isAuthenticated]);
-
-  const handleToggleFavorite = async () => {
-    if (!isAuthenticated) {
-      message.error("Bạn chưa đăng nhập. Vui lòng đăng nhập để thêm yêu thích.");
-      return;
-    }
-
-    setLoading(true);
-    try {
-      if (isFavorite) {
-        // Nếu đã tích, gọi DELETE để xóa khỏi danh sách yêu thích
-        await apiClient.delete(`/v1/favorites/${productId}`);
-        setIsFavorite(false);
-        message.success('Đã xóa khỏi danh sách yêu thích');
-      } else {
-        // Nếu chưa tích, gọi POST để thêm vào danh sách yêu thích
-        await apiClient.post(`/v1/favorites/${productId}`);
-        setIsFavorite(true);
-        message.success('Đã thêm vào danh sách yêu thích');
-      }
-    } catch (error: any) {
-      console.error('favorite error', error);
-      message.error(
-        error?.response?.data?.message || 'Thao tác yêu thích thất bại. Vui lòng thử lại.',
-      );
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <Button
-      type="text"
-      icon={
-        isFavorite ? (
-          <HeartFilled style={{ color: "#ff4d4f" }} />
-        ) : (
-          <HeartOutlined />
-        )
-      }
-      onClick={handleToggleFavorite}
-      loading={loading}
-    />
-  );
-};

@@ -2,11 +2,11 @@ import { axiosClient } from './axiosClient';
 
 export interface CouponRequest {
   code: string;
-  discountType: 'PERCENTAGE' | 'FIXED_AMOUNT';
+  discountType: 'PERCENTAGE' | 'PERCENT' | 'FIXED_AMOUNT' | 'FIXED';
   discountValue: number;
   minOrderValue?: number;
-  maxDiscountAmount?: number;
-  usageLimit: number;
+  maxDiscountAmount?: number | null;
+  usageLimit?: number;
   startDate?: string;
   endDate?: string;
   isActive?: boolean;
