@@ -46,12 +46,60 @@ public class ProductController {
             @RequestParam(required = false) Long categoryId,
             @RequestParam(required = false) Long brandId,
             @RequestParam(required = false) String sizeValue,
+            @RequestParam(required = false, name = "variantSize") String sizeAlias,
             @RequestParam(required = false) String color,
+            @RequestParam(required = false) String material,
             @RequestParam(required = false) BigDecimal minPrice,
             @RequestParam(required = false) BigDecimal maxPrice,
+            @RequestParam(required = false) BigDecimal minSalePrice,
+            @RequestParam(required = false) BigDecimal maxSalePrice,
             @RequestParam(required = false) String sort,
             @RequestParam(required = false) Boolean isSale,
-            @RequestParam(defaultValue = "false") boolean excludeSale
+            @RequestParam(defaultValue = "false") boolean excludeSale,
+            @RequestParam(defaultValue = "false") boolean excludePromotion,
+            @RequestParam(required = false) Long campaignId,
+            @RequestParam(required = false) BigDecimal discountMin,
+            @RequestParam(required = false) BigDecimal discountMax
+    ) {
+        String resolvedSize = sizeValue != null ? sizeValue : sizeAlias;
+        BigDecimal resolvedMinPrice = minSalePrice != null ? minSalePrice : minPrice;
+        BigDecimal resolvedMaxPrice = maxSalePrice != null ? maxSalePrice : maxPrice;
+        return ResponseEntity.ok(productService.filterProducts(
+                page,
+                size,
+                keyword,
+                categoryId,
+                brandId,
+                resolvedSize,
+                color,
+                material,
+                resolvedMinPrice,
+                resolvedMaxPrice,
+                sort,
+                (excludeSale || excludePromotion) ? Boolean.FALSE : isSale,
+                campaignId,
+                discountMin,
+                discountMax
+        ));
+    }
+
+    @GetMapping("/promotions")
+    public ResponseEntity<PageResponse<ProductListResponse>> getPromotionProducts(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "12") int size,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) Long categoryId,
+            @RequestParam(required = false) Long brandId,
+            @RequestParam(required = false) BigDecimal minSalePrice,
+            @RequestParam(required = false) BigDecimal maxSalePrice,
+            @RequestParam(required = false) BigDecimal discountMin,
+            @RequestParam(required = false) BigDecimal discountMax,
+            @RequestParam(required = false) String sizeValue,
+            @RequestParam(required = false, name = "variantSize") String sizeAlias,
+            @RequestParam(required = false) String color,
+            @RequestParam(required = false) String material,
+            @RequestParam(required = false) Long campaignId,
+            @RequestParam(required = false) String sort
     ) {
         return ResponseEntity.ok(productService.filterProducts(
                 page,
@@ -59,12 +107,16 @@ public class ProductController {
                 keyword,
                 categoryId,
                 brandId,
-                sizeValue,
+                sizeValue != null ? sizeValue : sizeAlias,
                 color,
-                minPrice,
-                maxPrice,
+                material,
+                minSalePrice,
+                maxSalePrice,
                 sort,
-                excludeSale ? Boolean.FALSE : isSale
+                Boolean.TRUE,
+                campaignId,
+                discountMin,
+                discountMax
         ));
     }
 

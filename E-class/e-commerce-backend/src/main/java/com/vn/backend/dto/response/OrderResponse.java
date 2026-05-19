@@ -45,4 +45,8 @@ public class OrderResponse {
     private String paymentMethodCode;
     private String paymentMethodName;
     private Boolean canRetryVnpay;
+    private Boolean inventoryReserved;
+    private OffsetDateTime inventoryReservedAt;
+    private Boolean inventoryReleased;
+    private OffsetDateTime inventoryReleasedAt;
 }

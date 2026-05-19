@@ -69,13 +69,17 @@ export interface PosAvailableDiscountResponse {
   issuedQuantity?: number | null;
   usedCount?: number | null;
   remainingCount?: number | null;
+  remainingUses?: number | null;
   usedPercent?: number | null;
   remainingPercent?: number | null;
   startDate?: string | null;
   endDate?: string | null;
   isActive: boolean;
   estimatedDiscountAmount: number;
+  eligible?: boolean | null;
+  ineligibleReason?: string | null;
   bestVoucher: boolean;
+  isBest?: boolean | null;
 }
 
 export interface PosCreateOrderRequest {

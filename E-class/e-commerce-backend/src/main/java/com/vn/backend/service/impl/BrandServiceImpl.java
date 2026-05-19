@@ -38,7 +38,7 @@ public class BrandServiceImpl implements BrandService {
     @Override
     public BrandResponse getBrandById(Long id) {
         Brand brand = brandRepository.findByIdActive(id)
-                .orElseThrow(() -> new RuntimeException("Brand not found with id: " + id));
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy thương hiệu với ID: " + id));
         return mapToResponse(brand);
     }
 
@@ -57,7 +57,7 @@ public class BrandServiceImpl implements BrandService {
     @Transactional
     public BrandResponse updateBrand(Long id, BrandRequest request) {
         Brand brand = brandRepository.findByIdActive(id)
-                .orElseThrow(() -> new RuntimeException("Brand not found with id: " + id));
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy thương hiệu với ID: " + id));
 
         brand.setName(request.getName());
         brand.setIsActive(request.getIsActive());
@@ -70,7 +70,7 @@ public class BrandServiceImpl implements BrandService {
     @Transactional
     public void deleteBrand(Long id) {
         Brand brand = brandRepository.findByIdActive(id)
-                .orElseThrow(() -> new RuntimeException("Brand not found with id: " + id));
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy thương hiệu với ID: " + id));
 
         brand.setDeletedAt(OffsetDateTime.now());
         brandRepository.save(brand);

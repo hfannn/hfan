@@ -24,6 +24,7 @@ import { orderService } from "@/services/order.service";
 import MyOrdersPage from "./MyOrdersPage";
 import { useAuth } from "@/services/AuthContext";
 import { resolveImageUrl } from "@/utils/utils";
+import { getProductAttributeLabel } from "@/utils/productAttributeLabel";
 
 const { Title, Text } = Typography;
 
@@ -33,10 +34,10 @@ interface CartItem {
   productId: number;
   image: string;
   name: string;
+  sku: string;
   size?: string | null;
   color?: string | null;
   material?: string | null;
-  variantCode?: string | null;
   price: number;
   originalPrice: number;
   unitPrice: number;
@@ -67,7 +68,7 @@ const CartPage = () => {
   ); // eslint-disable-line
 
   const formatMoney = (value: number) =>
-    `${Number(value || 0).toLocaleString("vi-VN")} ₫`;
+    `${Number(value || 0).toLocaleString("vi-VN")} đ`;
 
   const mapCartItems = (items: any[] = []): CartItem[] =>
     items.map((item: any) => ({
@@ -75,7 +76,8 @@ const CartPage = () => {
       id: item.cartItemId,
       productId: item.productId,
       image: resolveImageUrl(item.imageUrl) || "https://via.placeholder.com/80",
-      name: `${item.productName} - ${item.variantCode}`,
+      name: String(item.productName || "-"),
+      sku: String(item.variantCode || "-"),
       size: item.size,
       color: item.color,
       material: item.material,
@@ -265,6 +267,7 @@ const CartPage = () => {
   const rowSelection: TableRowSelection<any> = {
     selectedRowKeys,
     onChange: onSelectChange,
+    columnWidth: 48,
   };
 
   const columns = [
@@ -272,37 +275,35 @@ const CartPage = () => {
       title: "Sản phẩm",
       dataIndex: "name",
       key: "name",
+      width: 360,
       render: (_: any, record: CartItem) => (
-        <Space align="start">
-          <Image width={80} src={record.image} preview={false} />
-          <Space direction="vertical" size={4}>
-            <Text strong>{record.name}</Text>
+        <Space align="start" className="cart-product-cell">
+          <Image
+            width={76}
+            height={76}
+            src={record.image}
+            preview={false}
+            className="cart-product-image"
+            fallback="data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='152' height='152' viewBox='0 0 152 152'%3E%3Crect width='152' height='152' rx='12' fill='%23f3f6fb'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' fill='%23667085' font-size='14'%3ENo Image%3C/text%3E%3C/svg%3E"
+          />
+          <Space direction="vertical" size={4} className="cart-product-info">
+            <Text strong className="cart-product-name">{record.name}</Text>
 
-            <Space size={[8, 4]} wrap>
-              {record.size && (
-                <Text type="secondary">
-                  Size: <Text strong>{record.size}</Text>
-                </Text>
-              )}
+            <Text type="secondary" className="cart-product-sku" title={record.sku}>
+              SKU: {record.sku || "-"}
+            </Text>
+            <div className="cart-variant-line cart-variant-inline">
+              <span>
+                {getProductAttributeLabel("SIZE")}: <strong>{record.size || "-"}</strong>
+              </span>
+              <span>
+                {getProductAttributeLabel("COLOR")}: <strong>{record.color || "-"}</strong>
+              </span>
+            </div>
+            <div className="cart-variant-line">
+              {getProductAttributeLabel("MATERIAL")}: <strong>{record.material || "-"}</strong>
+            </div>
 
-              {record.color && (
-                <Text type="secondary">
-                  Màu: <Text strong>{record.color}</Text>
-                </Text>
-              )}
-
-              {record.material && (
-                <Text type="secondary">
-                  Chất liệu: <Text strong>{record.material}</Text>
-                </Text>
-              )}
-            </Space>
-
-            {record.variantCode && (
-              <Text type="secondary" style={{ fontSize: 12 }}>
-                Mã SP: {record.variantCode}
-              </Text>
-            )}
           </Space>
         </Space>
       ),
@@ -311,17 +312,19 @@ const CartPage = () => {
       title: "Đơn giá",
       dataIndex: "price",
       key: "price",
+      width: 150,
+      align: "right" as const,
       render: (_price: number, record: CartItem) => (
-        <Space direction="vertical" size={0}>
-          <Text strong style={{ color: record.isSale ? "#c81d1d" : undefined }}>
+        <Space size={8} className="cart-price-cell">
+          <Text strong className={record.isSale ? "cart-price-sale" : "cart-price"}>
             {formatMoney(record.unitPrice)}
           </Text>
           {record.isSale && record.originalPrice > record.unitPrice && (
-            <Space size={6}>
-              <Text delete type="secondary" style={{ fontSize: 12 }}>
+            <Space size={6} className="cart-original-price-row">
+              <Text delete type="secondary" className="cart-original-price">
                 {formatMoney(record.originalPrice)}
               </Text>
-              <Text type="danger" style={{ fontSize: 12, fontWeight: 600 }}>
+              <Text type="danger" className="cart-discount-text">
                 -{record.discountPercent}%
               </Text>
             </Space>
@@ -333,8 +336,11 @@ const CartPage = () => {
       title: "Số lượng",
       dataIndex: "quantity",
       key: "quantity",
+      width: 120,
+      align: "center" as const,
       render: (quantity: number, record: CartItem) => (
         <InputNumber
+          className="cart-quantity-input"
           min={1}
           value={localQuantities[record.id] ?? quantity}
           disabled={!!updatingItemIds[record.id]}
@@ -353,17 +359,21 @@ const CartPage = () => {
       title: "Thành tiền",
       dataIndex: "total",
       key: "total",
+      width: 150,
+      align: "right" as const,
       render: (total: number) => (
-        <Text strong style={{ color: "#c81d1d" }}>
-          {total.toLocaleString("vi-VN")} ₫
+        <Text strong className="cart-line-total">
+          {formatMoney(total)}
         </Text>
       ),
     },
     {
       title: "Hành động",
       key: "action",
+      width: 116,
+      align: "center" as const,
       render: (_: any, record: CartItem) => (
-        <Space size="middle">
+        <Space size={8} className="cart-actions">
           <Tooltip title="Xem chi tiết">
             <Button
               icon={<EyeOutlined />}
@@ -426,52 +436,51 @@ const CartPage = () => {
       key: "cart",
       label: `Giỏ hàng của bạn (${cartItems.length})`,
       children: (
-        <Row gutter={[24, 24]}>
-          <Col xs={24} lg={16}>
-            <Card
-              bordered={false}
-              style={{ boxShadow: "0 4px 12px rgba(0,0,0,0.08)" }}
-            >
+        <Row gutter={[24, 24]} align="start" className="cart-content-row">
+          <Col xs={24} lg={16} xl={17}>
+            <Card bordered={false} className="cart-table-card">
               <Spin spinning={loadingCart}>
                 <Table
+                  className="cart-table"
                   rowSelection={rowSelection}
                   columns={columns}
                   dataSource={cartItems}
                   rowKey="id"
                   pagination={false}
+                  scroll={{ x: 900 }}
                 />
               </Spin>
             </Card>
           </Col>
-          <Col xs={24} lg={8}>
-            <Card
-              hoverable
-              bordered={false}
-              style={{
-                boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
-                position: "sticky",
-                top: 24,
-              }}
-            >
-              <Title level={4}>Tóm tắt đơn hàng</Title>
-              <Divider />
-              <Row justify="space-between" key="subtotal-row">
-                <Text>Tạm tính ({selectedItems.length} sản phẩm)</Text>
-                <Text strong>{subtotal.toLocaleString("vi-VN")} ₫</Text>
+          <Col xs={24} lg={8} xl={7}>
+            <Card hoverable bordered={false} className="cart-summary-card">
+              <Title level={4} className="cart-summary-title">Tóm tắt đơn hàng</Title>
+              <Divider className="cart-summary-divider" />
+              <Row justify="space-between" align="middle" key="selected-row" className="cart-summary-row">
+                <Text>Đã chọn {selectedItems.length} sản phẩm</Text>
+                <Text strong>{formatMoney(subtotal)}</Text>
               </Row>
-              <Divider />
-              <Row justify="space-between" key="total-row">
+              <Row justify="space-between" align="middle" key="subtotal-row" className="cart-summary-row">
+                <Text>Tạm tính</Text>
+                <Text strong>{formatMoney(subtotal)}</Text>
+              </Row>
+              <Divider className="cart-summary-divider" />
+              <Row justify="space-between" align="middle" key="total-row" className="cart-summary-total">
                 <Text strong>Tổng cộng</Text>
-                <Text strong style={{ color: "#c81d1d", fontSize: "1.2rem" }}>
-                  {subtotal.toLocaleString("vi-VN")} ₫
+                <Text strong className="cart-summary-total-value">
+                  {formatMoney(subtotal)}
                 </Text>
               </Row>
+              {selectedItems.length === 0 && (
+                <Text type="secondary" className="cart-checkout-hint">
+                  Vui lòng chọn sản phẩm để thanh toán.
+                </Text>
+              )}
               <Button
                 type="primary"
-                danger
                 block
                 size="large"
-                style={{ marginTop: "24px" }}
+                className="cart-checkout-button"
                 disabled={selectedItems.length === 0}
                 onClick={handleCheckout}
               >
@@ -540,11 +549,16 @@ const CartPage = () => {
   ];
 
   return (
-    <div style={{ padding: "24px" }}>
-      <Title level={2} style={{ marginBottom: "24px" }}>
+    <div className="cart-page">
+      <Title level={2} className="cart-page-title">
         Quản lý giỏ hàng & Đơn hàng
       </Title>
-      <Tabs activeKey={activeTab} items={tabItems} onChange={handleTabChange} />
+      <Tabs
+        activeKey={activeTab}
+        items={tabItems}
+        onChange={handleTabChange}
+        className="cart-tabs"
+      />
     </div>
   );
 };

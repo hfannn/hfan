@@ -36,7 +36,7 @@ public class PromotionServiceImpl implements PromotionService {
     @Override
     public PromotionResponse getById(Long id) {
         Promotion promotion = promotionRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Promotion not found with id: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy chương trình giảm giá với ID: " + id));
         return mapToResponse(promotion);
     }
 
@@ -54,7 +54,7 @@ public class PromotionServiceImpl implements PromotionService {
     @Transactional
     public PromotionResponse update(Long id, PromotionRequest request) {
         Promotion promotion = promotionRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Promotion not found with id: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy chương trình giảm giá với ID: " + id));
         mapRequestToEntity(request, promotion);
 
         Promotion updatedPromotion = promotionRepository.save(promotion);
@@ -65,7 +65,7 @@ public class PromotionServiceImpl implements PromotionService {
     @Transactional
     public void delete(Long id) {
         Promotion promotion = promotionRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Promotion not found with id: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy chương trình giảm giá với ID: " + id));
 
         promotion.setIsActive(false);
         promotionRepository.save(promotion);

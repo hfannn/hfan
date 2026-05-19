@@ -6,6 +6,7 @@ import { productService } from '@/services/product.service';
 interface ProductVariantAttributes {
   COLOR: string;
   SIZE: string;
+  MATERIAL?: string;
 }
 
 interface ProductVariant {
@@ -72,7 +73,7 @@ const CreateOrderModal = ({ open, product, onCancel, onSubmit }: CreateOrderModa
           }
         })
         .catch(error => {
-          console.error('Failed to fetch product details and variants:', error);
+          console.error('Không thể tải chi tiết sản phẩm và biến thể:', error);
           setVariants([]);
         })
         .finally(() => setLoading(false));
@@ -97,23 +98,29 @@ const CreateOrderModal = ({ open, product, onCancel, onSubmit }: CreateOrderModa
       });
       form.resetFields();
     }).catch(info => {
-      console.error('Form validation failed:', info);
+      console.error('Xác thực biểu mẫu thất bại:', info);
     });
   };
 
   const columns = [
     { title: 'SKU', dataIndex: 'code', key: 'code' }, 
     {
-      title: 'Size',
+      title: 'Kích cỡ',
       dataIndex: ['attributes', 'SIZE'], 
       key: 'size',
       render: (text: string) => text, 
     },
     {
-      title: 'Màu',
+      title: 'Màu sắc',
       dataIndex: ['attributes', 'COLOR'], 
       key: 'color',
       render: (text: string) => text, 
+    },
+    {
+      title: 'Chất liệu',
+      dataIndex: ['attributes', 'MATERIAL'],
+      key: 'material',
+      render: (text: string) => text || '-',
     },
     {
       title: 'Tồn hiện tại',

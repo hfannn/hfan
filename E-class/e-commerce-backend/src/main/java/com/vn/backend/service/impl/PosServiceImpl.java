@@ -70,6 +70,7 @@ public class PosServiceImpl implements PosService {
     private static final String ORDER_STATUS_CANCELLED = "CANCELLED";
     private static final String ORDER_TYPE_POS = "POS";
     private static final String PAYMENT_STATUS_PAID = "PAID";
+    private static final String VIETNAM_PHONE_REGEX = "^(0)(3|5|7|8|9)[0-9]{8}$";
 
     private static final int MAX_DRAFT_POS_ORDERS = 5;
     private static final int MAX_DRAFT_POS_ORDERS_PER_EMPLOYEE = 10;
@@ -370,11 +371,31 @@ public class PosServiceImpl implements PosService {
         String address = safeTrim(request.getAddress());
 
         if (fullName == null || fullName.isBlank()) {
-            throw new IllegalArgumentException("Tên khách hàng không được để trống");
+            throw new IllegalArgumentException("Vui lòng nhập họ tên.");
         }
 
-        if (phone == null || phone.isBlank()) {
-            throw new IllegalArgumentException("Số điện thoại không được để trống");
+        if (!isValidPersonName(fullName)) {
+            throw new IllegalArgumentException(
+                    fullName.length() < 2
+                            ? "Họ tên phải có ít nhất 2 ký tự."
+                            : "Họ tên không hợp lệ."
+            );
+        }
+
+        if (phone == null || phone.isBlank() || !phone.matches(VIETNAM_PHONE_REGEX)) {
+            throw new IllegalArgumentException(
+                    phone == null || phone.isBlank()
+                            ? "Vui lòng nhập số điện thoại."
+                            : "Số điện thoại không hợp lệ."
+            );
+        }
+
+        if (!isValidOptionalAddress(address)) {
+            throw new IllegalArgumentException(
+                    address != null && address.length() < 5
+                            ? "Địa chỉ chi tiết phải có ít nhất 5 ký tự."
+                            : "Địa chỉ chi tiết không hợp lệ."
+            );
         }
 
         UserProfile userProfile = userProfileRepository.findByPhone(phone)
@@ -467,7 +488,7 @@ public class PosServiceImpl implements PosService {
 
         if (hasCoupon) {
             if (order.getCustomer() == null) {
-                throw new IllegalArgumentException("Hóa đơn phải có khách hàng để dùng coupon");
+                throw new IllegalArgumentException("Vui lòng chọn khách hàng để áp dụng mã giảm giá.");
             }
 
             Coupon coupon = couponRepository.findById(request.getCouponId())
@@ -566,31 +587,57 @@ public class PosServiceImpl implements PosService {
         List<PosAvailableDiscountResponse> results = new ArrayList<>();
 
         if (order.getCustomer() != null) {
-            Long customerId = order.getCustomer().getId();
-
-            List<Coupon> coupons = couponRepository.findAvailableCouponsForCustomer(customerId);
+            List<Coupon> coupons = couponRepository.findAvailableCoupons();
             for (Coupon coupon : coupons) {
-                if (!isCouponApplicable(coupon, order, subtotal)) {
-                    continue;
-                }
-                results.add(mapCouponToPosDiscountResponse(coupon, subtotal));
+                results.add(mapCouponToPosDiscountResponse(coupon, order, subtotal));
             }
         }
 
-        results.sort(
-                Comparator.comparing(
-                                PosAvailableDiscountResponse::getEstimatedDiscountAmount,
-                                Comparator.nullsLast(BigDecimal::compareTo)
-                        )
-                        .reversed()
-                        .thenComparing(
-                                PosAvailableDiscountResponse::getEndDate,
-                                Comparator.nullsLast(OffsetDateTime::compareTo)
-                        )
-        );
+        results.sort((left, right) -> {
+            int eligibleCompare = Boolean.compare(
+                    Boolean.TRUE.equals(right.getEligible()),
+                    Boolean.TRUE.equals(left.getEligible())
+            );
+            if (eligibleCompare != 0) {
+                return eligibleCompare;
+            }
 
-        for (int i = 0; i < results.size(); i++) {
-            results.get(i).setBestVoucher(i == 0);
+            int discountCompare = defaultZero(right.getEstimatedDiscountAmount())
+                    .compareTo(defaultZero(left.getEstimatedDiscountAmount()));
+            if (discountCompare != 0) {
+                return discountCompare;
+            }
+
+            int minOrderCompare = defaultZero(left.getMinOrderValue())
+                    .compareTo(defaultZero(right.getMinOrderValue()));
+            if (minOrderCompare != 0) {
+                return minOrderCompare;
+            }
+
+            OffsetDateTime leftEnd = left.getEndDate();
+            OffsetDateTime rightEnd = right.getEndDate();
+            if (leftEnd != null && rightEnd != null) {
+                int endCompare = leftEnd.compareTo(rightEnd);
+                if (endCompare != 0) {
+                    return endCompare;
+                }
+            } else if (leftEnd != null) {
+                return -1;
+            } else if (rightEnd != null) {
+                return 1;
+            }
+
+            return String.valueOf(left.getCode()).compareTo(String.valueOf(right.getCode()));
+        });
+
+        boolean markedBest = false;
+        for (PosAvailableDiscountResponse result : results) {
+            boolean isBest = !markedBest && Boolean.TRUE.equals(result.getEligible());
+            result.setBestVoucher(isBest);
+            result.setIsBest(isBest);
+            if (isBest) {
+                markedBest = true;
+            }
         }
 
         return results;
@@ -893,6 +940,36 @@ public class PosServiceImpl implements PosService {
         return value.replaceAll("\\s+", "").trim();
     }
 
+    private boolean isValidPersonName(String value) {
+        if (value == null) {
+            return false;
+        }
+
+        String text = value.trim();
+        return text.length() >= 2
+                && text.length() <= 100
+                && !text.matches("^\\d+$")
+                && !containsDangerousText(text);
+    }
+
+    private boolean isValidOptionalAddress(String value) {
+        if (value == null || value.isBlank()) {
+            return true;
+        }
+
+        String text = value.trim();
+        return text.length() >= 5
+                && text.length() <= 255
+                && !text.matches("^\\d+$")
+                && !containsDangerousText(text);
+    }
+
+    private boolean containsDangerousText(String value) {
+        return value != null
+                && (value.matches(".*[<>{}\\[\\]].*")
+                || value.toLowerCase().contains("script"));
+    }
+
     private String generateCustomerCode() {
         Optional<Customer> lastCustomerOpt = customerRepository.findTopByOrderByIdDesc();
 
@@ -932,10 +1009,20 @@ public class PosServiceImpl implements PosService {
             return false;
         }
 
-        long totalUsedCount = couponUsageRepository.countByCoupon_Id(coupon.getId());
+        long totalUsedCount = couponUsageRepository.countValidUsagesByCouponId(coupon.getId());
         if (coupon.getUsageLimit() != null
                 && coupon.getUsageLimit() > 0
                 && totalUsedCount >= coupon.getUsageLimit()) {
+            return false;
+        }
+
+        if (coupon.getDiscountValue() == null || coupon.getDiscountValue().compareTo(BigDecimal.ZERO) <= 0) {
+            return false;
+        }
+
+        String normalizedType = coupon.getDiscountType() == null ? "" : coupon.getDiscountType().trim().toUpperCase();
+        if (("PERCENTAGE".equals(normalizedType) || "PERCENT".equals(normalizedType))
+                && coupon.getDiscountValue().compareTo(BigDecimal.valueOf(100)) > 0) {
             return false;
         }
 
@@ -943,25 +1030,75 @@ public class PosServiceImpl implements PosService {
             return false;
         }
 
-        long usedCountByCustomer = couponUsageRepository
-                .countByCoupon_IdAndCustomer_Id(
-                        coupon.getId(),
-                        order.getCustomer().getId()
-                );
+        return true;
+    }
 
-        return usedCountByCustomer == 0;
+    private String getCouponIneligibleReason(Coupon coupon, Order order, BigDecimal subtotal, long totalUsedCount) {
+        if (coupon == null) {
+            return "Mã giảm giá không hợp lệ";
+        }
+
+        if (order.getCustomer() == null) {
+            return "Vui lòng chọn khách hàng để áp dụng mã giảm giá.";
+        }
+
+        if (!Boolean.TRUE.equals(coupon.getIsActive())) {
+            return "Mã đang bị tắt";
+        }
+
+        OffsetDateTime now = OffsetDateTime.now();
+        if (coupon.getStartDate() != null && now.isBefore(coupon.getStartDate())) {
+            return "Mã chưa đến ngày áp dụng";
+        }
+
+        if (coupon.getEndDate() != null && now.isAfter(coupon.getEndDate())) {
+            return "Mã đã hết hạn";
+        }
+
+        if (coupon.getUsageLimit() != null
+                && coupon.getUsageLimit() > 0
+                && totalUsedCount >= coupon.getUsageLimit()) {
+            return "Mã đã hết lượt sử dụng";
+        }
+
+        if (coupon.getMinOrderValue() != null && subtotal.compareTo(coupon.getMinOrderValue()) < 0) {
+            return "Đơn hàng chưa đạt giá trị tối thiểu";
+        }
+
+        if (coupon.getDiscountValue() == null || coupon.getDiscountValue().compareTo(BigDecimal.ZERO) <= 0) {
+            return "Giá trị giảm không hợp lệ";
+        }
+
+        String normalizedType = coupon.getDiscountType() == null ? "" : coupon.getDiscountType().trim().toUpperCase();
+        if (("PERCENTAGE".equals(normalizedType) || "PERCENT".equals(normalizedType))
+                && coupon.getDiscountValue().compareTo(BigDecimal.valueOf(100)) > 0) {
+            return "Giá trị giảm phần trăm không hợp lệ";
+        }
+
+        return null;
     }
 
     private PosAvailableDiscountResponse mapCouponToPosDiscountResponse(
             Coupon coupon,
+            Order order,
             BigDecimal subtotal
     ) {
-        long totalUsedCount = couponUsageRepository.countByCoupon_Id(coupon.getId());
+        long totalUsedCount = couponUsageRepository.countValidUsagesByCouponId(coupon.getId());
 
         int issuedQuantity = coupon.getUsageLimit() != null ? coupon.getUsageLimit() : 0;
         int remainingCount = coupon.getUsageLimit() != null
                 ? Math.max(coupon.getUsageLimit() - (int) totalUsedCount, 0)
                 : 0;
+        String ineligibleReason = getCouponIneligibleReason(coupon, order, subtotal, totalUsedCount);
+        boolean eligible = ineligibleReason == null;
+        BigDecimal estimatedDiscountAmount = eligible
+                ? calculateDiscountAmount(
+                        subtotal,
+                        coupon.getDiscountType(),
+                        coupon.getDiscountValue(),
+                        coupon.getMaxDiscountAmount()
+                )
+                : BigDecimal.ZERO;
 
         double usedPercent = 0.0;
         double remainingPercent = 0.0;
@@ -990,18 +1127,17 @@ public class PosServiceImpl implements PosService {
                 .issuedQuantity(issuedQuantity)
                 .usedCount(totalUsedCount)
                 .remainingCount(remainingCount)
+                .remainingUses(coupon.getUsageLimit() != null ? remainingCount : null)
                 .usedPercent(usedPercent)
                 .remainingPercent(remainingPercent)
                 .startDate(coupon.getStartDate())
                 .endDate(coupon.getEndDate())
                 .isActive(coupon.getIsActive())
-                .estimatedDiscountAmount(calculateDiscountAmount(
-                        subtotal,
-                        coupon.getDiscountType(),
-                        coupon.getDiscountValue(),
-                        coupon.getMaxDiscountAmount()
-                ))
+                .estimatedDiscountAmount(estimatedDiscountAmount)
+                .eligible(eligible)
+                .ineligibleReason(ineligibleReason)
                 .bestVoucher(false)
+                .isBest(false)
                 .build();
     }
 
@@ -1020,7 +1156,7 @@ public class PosServiceImpl implements PosService {
 
         BigDecimal discountAmount = BigDecimal.ZERO;
 
-        if ("PERCENTAGE".equals(normalizedDiscountType)) {
+        if ("PERCENTAGE".equals(normalizedDiscountType) || "PERCENT".equals(normalizedDiscountType)) {
             discountAmount = subtotal.multiply(discountValue)
                     .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
 
@@ -1028,7 +1164,7 @@ public class PosServiceImpl implements PosService {
                     && discountAmount.compareTo(maxDiscountAmount) > 0) {
                 discountAmount = maxDiscountAmount;
             }
-        } else if ("FIXED_AMOUNT".equals(normalizedDiscountType)) {
+        } else if ("FIXED_AMOUNT".equals(normalizedDiscountType) || "FIXED".equals(normalizedDiscountType)) {
             discountAmount = discountValue;
         }
 
@@ -1042,6 +1178,10 @@ public class PosServiceImpl implements PosService {
     private void saveVoucherUsage(Order order, PosCheckoutRequest request) {
         if (request.getCouponId() == null) {
             return;
+        }
+
+        if (order.getCustomer() == null) {
+            throw new IllegalArgumentException("Vui lòng chọn khách hàng để áp dụng mã giảm giá.");
         }
 
         CouponUsage.CouponUsageBuilder builder = CouponUsage.builder()

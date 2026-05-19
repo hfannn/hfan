@@ -86,6 +86,20 @@ public class Order {
     private OffsetDateTime createdAt;
 
     @Builder.Default
+    @Column(name = "inventory_reserved")
+    private Boolean inventoryReserved = false;
+
+    @Column(name = "inventory_reserved_at")
+    private OffsetDateTime inventoryReservedAt;
+
+    @Builder.Default
+    @Column(name = "inventory_released")
+    private Boolean inventoryReleased = false;
+
+    @Column(name = "inventory_released_at")
+    private OffsetDateTime inventoryReleasedAt;
+
+    @Builder.Default
     @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<OrderItem> items = new ArrayList<>();
 
@@ -120,6 +134,12 @@ public class Order {
         }
         if (this.customerPaid == null) {
             this.customerPaid = BigDecimal.ZERO;
+        }
+        if (this.inventoryReserved == null) {
+            this.inventoryReserved = false;
+        }
+        if (this.inventoryReleased == null) {
+            this.inventoryReleased = false;
         }
     }
 }

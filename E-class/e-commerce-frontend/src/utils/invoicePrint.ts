@@ -1,4 +1,8 @@
 import { message } from "antd";
+import {
+  formatKnownVariantAttributes,
+  normalizeProductAttributeText,
+} from "@/utils/productAttributeLabel";
 
 type MoneyValue = number | string | null | undefined;
 
@@ -169,11 +173,13 @@ const getLineTotal = (item: InvoiceOrderItem) => {
 };
 
 const getVariantText = (item: InvoiceOrderItem) => {
-  if (item.variantInfo) {
-    return item.variantInfo;
-  }
+  const variantText = formatKnownVariantAttributes({
+    color: item.color,
+    size: item.size,
+    material: item.material,
+  });
 
-  return [item.size, item.color, item.material].filter(Boolean).join(" / ");
+  return variantText || normalizeProductAttributeText(item.variantInfo);
 };
 
 const buildItemRows = (items: InvoiceOrderItem[] = []) => {

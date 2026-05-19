@@ -295,7 +295,7 @@ const AddProductForm = ({ onFinish, onCancel }: AddProductFormProps) => {
       !selectedSizeIds.length ||
       !selectedMaterialIds.length
     ) {
-      message.warning("Vui lòng chọn ít nhất 1 màu, 1 size và 1 chất liệu");
+      message.warning("Vui lòng chọn ít nhất 1 màu sắc, 1 kích cỡ và 1 chất liệu");
       return;
     }
 
@@ -317,7 +317,7 @@ const AddProductForm = ({ onFinish, onCancel }: AddProductFormProps) => {
 
     if (!allColorIds.length || !allSizeIds.length || !allMaterialIds.length) {
       message.warning(
-        "Chưa có đủ dữ liệu màu, size hoặc chất liệu để tạo nhanh",
+        "Chưa có đủ dữ liệu màu sắc, kích cỡ hoặc chất liệu để tạo nhanh",
       );
       return;
     }
@@ -353,7 +353,7 @@ const AddProductForm = ({ onFinish, onCancel }: AddProductFormProps) => {
       message.warning(
         quickAttributeCode === "COLOR"
           ? "Vui lòng nhập tên màu"
-          : "Vui lòng nhập size",
+          : "Vui lòng nhập kích cỡ",
       );
       return;
     }
@@ -390,7 +390,7 @@ const AddProductForm = ({ onFinish, onCancel }: AddProductFormProps) => {
           ...new Set([...current, created.id]),
         ]);
 
-        message.success(`Đã thêm size ${created.value}`);
+        message.success(`Đã thêm kích cỡ ${created.value}`);
       }
 
       closeQuickAttributeModal();
@@ -399,7 +399,7 @@ const AddProductForm = ({ onFinish, onCancel }: AddProductFormProps) => {
         error?.response?.data?.message ||
           (quickAttributeCode === "COLOR"
             ? "Thêm màu thất bại"
-            : "Thêm size thất bại"),
+            : "Thêm kích cỡ thất bại"),
       );
     } finally {
       setQuickAttributeSaving(false);
@@ -736,25 +736,25 @@ const AddProductForm = ({ onFinish, onCancel }: AddProductFormProps) => {
               name="selected_color_ids"
               label={
                 <Space>
-                  <span>Chọn màu</span>
+                  <span>Chọn màu sắc</span>
                   <Button
                     size="small"
                     type="link"
                     icon={<PlusOutlined />}
                     onClick={() => openQuickAttributeModal("COLOR")}
                   >
-                    Thêm màu
+                    Thêm màu sắc
                   </Button>
                 </Space>
               }
               style={compactFormItemStyle}
               rules={[
-                { required: true, message: "Vui lòng chọn ít nhất 1 màu" },
+                { required: true, message: "Vui lòng chọn ít nhất 1 màu sắc" },
               ]}
             >
               <Select
                 mode="multiple"
-                placeholder="Chọn màu"
+                placeholder="Chọn màu sắc"
                 options={colors}
                 loading={loading}
                 optionFilterProp="label"
@@ -768,25 +768,25 @@ const AddProductForm = ({ onFinish, onCancel }: AddProductFormProps) => {
               name="selected_size_ids"
               label={
                 <Space>
-                  <span>Chọn size</span>
+                  <span>Chọn kích cỡ</span>
                   <Button
                     size="small"
                     type="link"
                     icon={<PlusOutlined />}
                     onClick={() => openQuickAttributeModal("SIZE")}
                   >
-                    Thêm size
+                    Thêm kích cỡ
                   </Button>
                 </Space>
               }
               style={compactFormItemStyle}
               rules={[
-                { required: true, message: "Vui lòng chọn ít nhất 1 size" },
+                { required: true, message: "Vui lòng chọn ít nhất 1 kích cỡ" },
               ]}
             >
               <Select
                 mode="multiple"
-                placeholder="Chọn size"
+                placeholder="Chọn kích cỡ"
                 options={sizes}
                 loading={loading}
                 optionFilterProp="label"
@@ -885,7 +885,7 @@ const AddProductForm = ({ onFinish, onCancel }: AddProductFormProps) => {
       </Card>
 
       {variantRows.length === 0 ? (
-        <Empty description="Chưa có biến thể. Hãy chọn màu, size và bấm Tạo biến thể" />
+        <Empty description="Chưa có biến thể. Hãy chọn màu sắc, kích cỡ và bấm Tạo biến thể" />
       ) : (
         <Space direction="vertical" style={{ width: "100%" }} size={12}>
           {variantRows.map((variant, index) => (
@@ -967,7 +967,7 @@ const AddProductForm = ({ onFinish, onCancel }: AddProductFormProps) => {
       <Modal
         open={quickAttributeOpen}
         title={
-          quickAttributeCode === "COLOR" ? "Thêm nhanh màu" : "Thêm nhanh size"
+          quickAttributeCode === "COLOR" ? "Thêm nhanh màu sắc" : "Thêm nhanh kích cỡ"
         }
         onCancel={closeQuickAttributeModal}
         onOk={handleQuickCreateAttributeValue}
@@ -978,7 +978,7 @@ const AddProductForm = ({ onFinish, onCancel }: AddProductFormProps) => {
       >
         <Form layout="vertical">
           <Form.Item
-            label={quickAttributeCode === "COLOR" ? "Tên màu" : "Size"}
+            label={quickAttributeCode === "COLOR" ? "Tên màu sắc" : "Kích cỡ"}
             required
           >
             <Input

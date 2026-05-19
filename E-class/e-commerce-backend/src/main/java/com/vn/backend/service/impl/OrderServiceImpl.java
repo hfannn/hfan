@@ -36,7 +36,6 @@ import com.vn.backend.repository.CartItemRepository;
 import com.vn.backend.repository.CouponUsageRepository;
 import com.vn.backend.repository.CustomerRepository;
 import com.vn.backend.repository.EmployeeRepository;
-import com.vn.backend.repository.InventoryTransactionRepository;
 import com.vn.backend.repository.OrderItemRepository;
 import com.vn.backend.repository.OrderRepository;
 import com.vn.backend.repository.OrderStatusHistoryRepository;
@@ -93,10 +92,10 @@ public class OrderServiceImpl implements OrderService {
     private final GhtkService ghtkService;
     private final GHTKLogicHandler ghtkLogicHandler;
     private final OrderStatusHistoryRepository orderStatusHistoryRepository;
-    private final InventoryTransactionRepository inventoryTransactionRepository;
     private final ProductPriceService productPriceService;
     private final CheckoutQuoteService checkoutQuoteService;
     private final ReviewRepository reviewRepository;
+    private final OrderInventoryService orderInventoryService;
 
     private static final String ORDER_TYPE_ONLINE = "ONLINE";
     private static final String ORDER_TYPE_POS = "POS";
@@ -113,6 +112,7 @@ public class OrderServiceImpl implements OrderService {
 
     private static final String PAYMENT_STATUS_PAID = "PAID";
     private static final String PAYMENT_STATUS_REFUND_PENDING = "REFUND_PENDING";
+    private static final String VIETNAM_PHONE_REGEX = "^(0)(3|5|7|8|9)[0-9]{8}$";
 
     private static final int RETURN_WINDOW_DAYS = 7;
 
@@ -124,6 +124,7 @@ public class OrderServiceImpl implements OrderService {
         }
 
         Customer customer = resolveCustomer(userId);
+        validateAndNormalizeShippingInfo(request);
 
         List<OrderItem> orderItems = new ArrayList<>();
 
@@ -261,6 +262,9 @@ public class OrderServiceImpl implements OrderService {
         order.setItems(orderItems);
 
         Order savedOrder = orderRepository.save(order);
+
+        orderInventoryService.reserveStockForOnlineOrder(savedOrder);
+        savedOrder = orderRepository.save(savedOrder);
 
         saveOrderStatusHistory(savedOrder, null, ORDER_STATUS_PENDING);
 
@@ -404,7 +408,11 @@ public class OrderServiceImpl implements OrderService {
                 employeeId,
                 employeeName,
                 itemResponses,
-                statusHistory
+                statusHistory,
+                order.getInventoryReserved(),
+                order.getInventoryReservedAt(),
+                order.getInventoryReleased(),
+                order.getInventoryReleasedAt()
         );
     }
 
@@ -511,7 +519,7 @@ public class OrderServiceImpl implements OrderService {
     @Transactional
     public OrderResponse updateOrderStatus(Long orderId, String status) {
         Order order = orderRepository.findById(orderId)
-                .orElseThrow(() -> new ResourceNotFoundException("Order not found with id: " + orderId));
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy đơn hàng với ID: " + orderId));
 
         String normalizedStatus = status == null ? null : status.trim().toUpperCase();
         validateOrderStatus(normalizedStatus);
@@ -525,12 +533,20 @@ public class OrderServiceImpl implements OrderService {
             throw new InvalidRequestException("Không thể cập nhật trạng thái từ đơn hàng đã kết thúc.");
         }
 
-        if (ORDER_STATUS_PENDING.equals(previousStatus) && ORDER_STATUS_CONFIRMED.equals(normalizedStatus)) {
-            decreaseStockForOrder(order);
+        if (ORDER_STATUS_PENDING.equals(previousStatus)
+                && ORDER_STATUS_CONFIRMED.equals(normalizedStatus)
+                && ORDER_TYPE_ONLINE.equalsIgnoreCase(order.getOrderType())
+                && !Boolean.TRUE.equals(order.getInventoryReserved())) {
+            orderInventoryService.reserveStockForOnlineOrder(order);
         }
 
-        if (ORDER_STATUS_CONFIRMED.equals(previousStatus) && ORDER_STATUS_CANCELLED.equals(normalizedStatus)) {
-            restoreStockForOrder(order);
+        if (ORDER_STATUS_CANCELLED.equals(normalizedStatus)) {
+            if (ORDER_TYPE_ONLINE.equalsIgnoreCase(order.getOrderType())) {
+                orderInventoryService.releaseStockForOrder(order, "ONLINE_ORDER_ADMIN_CANCELLED");
+                couponUsageRepository.deleteByOrder_Id(order.getId());
+            } else if (ORDER_STATUS_CONFIRMED.equals(previousStatus)) {
+                restoreStockForOrder(order);
+            }
         }
 
         order.setStatus(normalizedStatus);
@@ -561,6 +577,10 @@ public class OrderServiceImpl implements OrderService {
         }
 
         String previousStatus = order.getStatus();
+
+        if (ORDER_TYPE_ONLINE.equalsIgnoreCase(order.getOrderType())) {
+            orderInventoryService.releaseStockForOrder(order, "ONLINE_ORDER_CUSTOMER_CANCELLED");
+        }
 
         order.setStatus(ORDER_STATUS_CANCELLED);
 
@@ -654,11 +674,11 @@ public class OrderServiceImpl implements OrderService {
     @Override
     public List<OrderShippingAddressResponse> getUserShippingAddresses(Long userId) {
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy người dùng."));
 
         Customer customer = customerRepository
                 .findByUserProfileId(user.getUserProfile().getId())
-                .orElseThrow(() -> new ResourceNotFoundException("Customer not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy khách hàng."));
 
         return orderRepository.findAll()
                 .stream()
@@ -828,6 +848,10 @@ public class OrderServiceImpl implements OrderService {
                 .paymentMethodCode(paymentMethodCode)
                 .paymentMethodName(paymentMethodName)
                 .canRetryVnpay(canRetryVnpay)
+                .inventoryReserved(order.getInventoryReserved())
+                .inventoryReservedAt(order.getInventoryReservedAt())
+                .inventoryReleased(order.getInventoryReleased())
+                .inventoryReleasedAt(order.getInventoryReleasedAt())
                 .build();
     }
 
@@ -934,6 +958,129 @@ public class OrderServiceImpl implements OrderService {
                 .collect(Collectors.joining(", "));
     }
 
+    private void validateAndNormalizeShippingInfo(PlaceOrderRequest request) {
+        if (request.getShippingInfo() == null) {
+            throw new InvalidRequestException("Vui lòng nhập thông tin giao hàng.");
+        }
+
+        var shippingInfo = request.getShippingInfo();
+        String customerName = safeTrim(shippingInfo.getCustomerName());
+        String phone = normalizePhone(shippingInfo.getPhone());
+        String address = safeTrim(shippingInfo.getAddress());
+        String provinceName = safeTrim(defaultText(shippingInfo.getProvinceName(), shippingInfo.getProvince()));
+        String districtName = safeTrim(defaultText(shippingInfo.getDistrictName(), shippingInfo.getDistrict()));
+        String wardName = safeTrim(defaultText(shippingInfo.getWardName(), shippingInfo.getWard()));
+        String note = safeTrim(shippingInfo.getNote());
+
+        if (!StringUtils.hasText(customerName)) {
+            throw new InvalidRequestException("Vui lòng nhập họ tên.");
+        }
+
+        if (!isValidPersonName(customerName)) {
+            throw new InvalidRequestException(
+                    customerName.length() < 2
+                            ? "Họ tên phải có ít nhất 2 ký tự."
+                            : "Họ tên không hợp lệ."
+            );
+        }
+
+        if (!StringUtils.hasText(phone) || !phone.matches(VIETNAM_PHONE_REGEX)) {
+            throw new InvalidRequestException(
+                    StringUtils.hasText(phone)
+                            ? "Số điện thoại không hợp lệ."
+                            : "Vui lòng nhập số điện thoại."
+            );
+        }
+
+        if (!StringUtils.hasText(provinceName)) {
+            throw new InvalidRequestException("Vui lòng chọn Tỉnh/Thành phố.");
+        }
+
+        if (!StringUtils.hasText(districtName)) {
+            throw new InvalidRequestException("Vui lòng chọn Quận/Huyện.");
+        }
+
+        if (!StringUtils.hasText(wardName)) {
+            throw new InvalidRequestException("Vui lòng chọn Phường/Xã.");
+        }
+
+        if (!isValidAddressDetail(address)) {
+            throw new InvalidRequestException(
+                    StringUtils.hasText(address) && address.length() < 5
+                            ? "Địa chỉ chi tiết phải có ít nhất 5 ký tự."
+                            : "Địa chỉ chi tiết không hợp lệ."
+            );
+        }
+
+        if (!isValidOptionalNote(note)) {
+            throw new InvalidRequestException("Ghi chú giao hàng không hợp lệ.");
+        }
+
+        shippingInfo.setCustomerName(customerName);
+        shippingInfo.setPhone(phone);
+        shippingInfo.setAddress(address);
+        shippingInfo.setProvince(provinceName);
+        shippingInfo.setDistrict(districtName);
+        shippingInfo.setWard(wardName);
+        shippingInfo.setProvinceName(provinceName);
+        shippingInfo.setDistrictName(districtName);
+        shippingInfo.setWardName(wardName);
+        shippingInfo.setNote(note);
+    }
+
+    private boolean isValidPersonName(String value) {
+        if (!StringUtils.hasText(value)) {
+            return false;
+        }
+
+        String text = value.trim();
+        return text.length() >= 2
+                && text.length() <= 100
+                && !text.matches("^\\d+$")
+                && !containsDangerousText(text);
+    }
+
+    private boolean isValidAddressDetail(String value) {
+        if (!StringUtils.hasText(value)) {
+            return false;
+        }
+
+        String text = value.trim();
+        return text.length() >= 5
+                && text.length() <= 255
+                && !text.matches("^\\d+$")
+                && !containsDangerousAddressText(text);
+    }
+
+    private boolean isValidOptionalNote(String value) {
+        if (value == null || value.isBlank()) {
+            return true;
+        }
+
+        String text = value.trim();
+        return text.length() <= 255 && !containsDangerousAddressText(text);
+    }
+
+    private boolean containsDangerousText(String value) {
+        return value != null
+                && (value.matches(".*[<>{}\\[\\]].*")
+                || value.toLowerCase().contains("script"));
+    }
+
+    private boolean containsDangerousAddressText(String value) {
+        return value != null
+                && (value.matches(".*[<>].*")
+                || value.toLowerCase().contains("script"));
+    }
+
+    private String safeTrim(String value) {
+        return value == null ? null : value.trim();
+    }
+
+    private String normalizePhone(String value) {
+        return value == null ? null : value.replaceAll("\\s+", "").trim();
+    }
+
     private void validateOrderStatus(String status) {
         List<String> validStatuses = List.of(
                 ORDER_STATUS_PENDING,
@@ -965,11 +1112,11 @@ public class OrderServiceImpl implements OrderService {
 
     private Customer resolveCustomer(Long userId) {
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new InvalidRequestException("User not found"));
+                .orElseThrow(() -> new InvalidRequestException("Không tìm thấy người dùng."));
 
         return customerRepository
                 .findByUserProfileId(user.getUserProfile().getId())
-                .orElseThrow(() -> new InvalidRequestException("Customer not found"));
+                .orElseThrow(() -> new InvalidRequestException("Không tìm thấy khách hàng."));
     }
 
     private void validateReturnReason(String reason) {
@@ -1098,39 +1245,11 @@ public class OrderServiceImpl implements OrderService {
 
         for (Long variantId : sortedVariantIds) {
             if (!variantsMap.containsKey(variantId)) {
-                throw new ResourceNotFoundException("Product variant not found with id: " + variantId);
+                throw new ResourceNotFoundException("Không tìm thấy biến thể sản phẩm với ID: " + variantId);
             }
         }
 
         return variantsMap;
-    }
-
-    private void reserveStockForOnlineOrder(
-            Map<Long, Integer> requestedQuantityByVariantId,
-            Map<Long, ProductVariant> variantsMap
-    ) {
-        for (Map.Entry<Long, Integer> entry : requestedQuantityByVariantId.entrySet()) {
-            Long variantId = entry.getKey();
-            Integer requestedQuantity = entry.getValue();
-
-            ProductVariant variant = variantsMap.get(variantId);
-
-            validateVariantCanBeOrdered(variant);
-
-            int currentStock = variant.getStockQuantity() == null ? 0 : variant.getStockQuantity();
-
-            if (currentStock < requestedQuantity) {
-                throw new InvalidRequestException(
-                        "Không đủ tồn kho cho sản phẩm: "
-                                + variant.getProduct().getName()
-                                + " - "
-                                + variant.getCode()
-                );
-            }
-
-            variant.setStockQuantity(currentStock - requestedQuantity);
-            productVariantRepository.save(variant);
-        }
     }
 
     private void validateVariantCanBeOrdered(ProductVariant variant) {

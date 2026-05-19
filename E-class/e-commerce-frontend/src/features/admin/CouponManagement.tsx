@@ -4,6 +4,7 @@ import type { FormInstance, RuleObject } from "antd/es/form";
 import { useState, useRef } from "react";
 import type { ProColumns, ActionType } from "@ant-design/pro-table";
 import ProTable from "@ant-design/pro-table";
+import type { ProFormInstance } from "@ant-design/pro-form";
 import {
   ModalForm,
   ProFormText,
@@ -11,6 +12,7 @@ import {
   ProFormDigit,
   ProFormSwitch,
   ProFormDateTimePicker,
+  ProFormDependency,
 } from "@ant-design/pro-form";
 import dayjs from "dayjs";
 import { couponService, CouponRequest } from "@/services/coupon.service";
@@ -18,11 +20,14 @@ import { couponService, CouponRequest } from "@/services/coupon.service";
 interface Coupon {
   id: number;
   code: string;
-  discountType: "PERCENTAGE" | "FIXED_AMOUNT";
+  name?: string;
+  discountType: "PERCENTAGE" | "PERCENT" | "FIXED_AMOUNT" | "FIXED";
   discountValue: number;
   minOrderValue?: number | null;
   maxDiscountAmount?: number | null;
   usageLimit: number | null;
+  usedCount?: number | null;
+  remainingUses?: number | null;
   remainingUsage?: number | null;
   remainingCount?: number | null;
   startDate?: string | null;
@@ -42,12 +47,26 @@ const normalizeDateValue = (value: any) => {
     : new Date(value).toISOString();
 };
 
+const normalizeDiscountType = (value?: string) =>
+  String(value || "").trim().toUpperCase();
+
+const isPercentType = (value?: string) => {
+  const type = normalizeDiscountType(value);
+  return type === "PERCENTAGE" || type === "PERCENT";
+};
+
+const normalizeCouponCode = (value: string) =>
+  String(value || "")
+    .trim()
+    .toUpperCase();
+
 type CouponFormRuleFactory = (form: FormInstance) => RuleObject;
 
 const CouponManagementPage = () => {
   const [modalVisible, setModalVisible] = useState<boolean>(false);
   const [editingCoupon, setEditingCoupon] = useState<any>(null);
   const actionRef = useRef<ActionType>(null);
+  const formRef = useRef<ProFormInstance>();
 
   const handleAdd = () => {
     setEditingCoupon(null);
@@ -75,13 +94,31 @@ const CouponManagementPage = () => {
 
   const handleSubmit = async (values: any) => {
     try {
+      const discountType = normalizeDiscountType(values.discountType);
+      const startDate = normalizeDateValue(values.startDate);
+      const endDate = normalizeDateValue(values.endDate);
+
+      if (startDate && endDate && dayjs(endDate).isBefore(dayjs(startDate))) {
+        message.error("Thời gian kết thúc phải lớn hơn thời gian bắt đầu");
+        return false;
+      }
+
+      if (values.isActive && endDate && dayjs(endDate).isBefore(dayjs())) {
+        message.error("Không thể kích hoạt mã giảm giá đã hết hạn");
+        return false;
+      }
+
       const payload: CouponRequest = {
         ...values,
-        code: values.code.trim().toUpperCase(),
+        code: normalizeCouponCode(values.code),
+        discountType: discountType as CouponRequest["discountType"],
         minOrderValue: Number(values.minOrderValue || 0),
-        maxDiscountAmount: values.maxDiscountAmount ?? undefined,
-        startDate: normalizeDateValue(values.startDate),
-        endDate: normalizeDateValue(values.endDate),
+        maxDiscountAmount: isPercentType(discountType)
+          ? Number(values.maxDiscountAmount || 0)
+          : null,
+        usageLimit: values.usageLimit ? Number(values.usageLimit) : undefined,
+        startDate,
+        endDate,
       };
 
       if (editingCoupon?.id) {
@@ -112,7 +149,9 @@ const CouponManagementPage = () => {
       valueType: "select",
       valueEnum: {
         PERCENTAGE: { text: "Phần trăm (%)" },
+        PERCENT: { text: "Phần trăm (%)" },
         FIXED_AMOUNT: { text: "Số tiền cố định" },
+        FIXED: { text: "Số tiền cố định" },
       },
     },
     {
@@ -121,7 +160,7 @@ const CouponManagementPage = () => {
       search: false,
       align: "right",
       render: (_, record) =>
-        record.discountType === "PERCENTAGE"
+        isPercentType(record.discountType)
           ? `${record.discountValue}%`
           : formatMoney(record.discountValue),
     },
@@ -141,12 +180,29 @@ const CouponManagementPage = () => {
         record.maxDiscountAmount ? formatMoney(record.maxDiscountAmount) : "-",
     },
     {
-      title: "Lượt còn lại",
+      title: "Tổng lượt sử dụng",
+      dataIndex: "usageLimit",
+      align: "center",
+      search: false,
+      render: (_, record) => record.usageLimit ?? "Không giới hạn",
+    },
+    {
+      title: "Đã sử dụng",
+      dataIndex: "usedCount",
+      align: "center",
+      search: false,
+      render: (_, record) => record.usedCount ?? 0,
+    },
+    {
+      title: "Còn lại",
       dataIndex: "remainingCount",
       align: "center",
       search: false,
       render: (_, record) =>
-        record.remainingCount ?? record.remainingUsage ?? record.usageLimit ?? "-",
+        record.remainingUses ??
+        record.remainingCount ??
+        record.remainingUsage ??
+        (record.usageLimit == null ? "Không giới hạn" : "-"),
     },
     {
       title: "Thời gian hiệu lực",
@@ -216,7 +272,7 @@ const CouponManagementPage = () => {
         }}
         rowKey="id"
         pagination={{ pageSize: 10 }}
-        headerTitle="Quản lý mã giảm giá (Coupon)"
+        headerTitle="Quản lý mã giảm giá"
         toolBarRender={() => [
           <Button
             key="add"
@@ -229,6 +285,7 @@ const CouponManagementPage = () => {
         ]}
       />
       <ModalForm
+        formRef={formRef}
         title={editingCoupon ? "Cập nhật mã giảm giá" : "Thêm mã giảm giá mới"}
         width="620px"
         open={modalVisible}
@@ -238,7 +295,6 @@ const CouponManagementPage = () => {
           editingCoupon || {
             isActive: true,
             discountType: "FIXED_AMOUNT",
-            usageLimit: 1,
             minOrderValue: 0,
           }
         }
@@ -251,9 +307,18 @@ const CouponManagementPage = () => {
           name="code"
           label="Mã giảm giá"
           placeholder="Ví dụ: SALE10"
+          fieldProps={{
+            onChange: (event) => {
+              formRef.current?.setFieldValue("code", normalizeCouponCode(event.target.value));
+            },
+          }}
           rules={[
             { required: true, message: "Vui lòng nhập mã giảm giá" },
             { min: 3, message: "Mã phải có ít nhất 3 ký tự" },
+            {
+              pattern: /^[A-Z0-9_-]+$/,
+              message: "Mã chỉ gồm A-Z, 0-9, dấu gạch ngang hoặc gạch dưới",
+            },
           ]}
         />
         <ProFormSelect
@@ -274,10 +339,10 @@ const CouponManagementPage = () => {
             { required: true, message: "Vui lòng nhập giá trị giảm" },
             (({ getFieldValue }) => ({
               validator(_: RuleObject, value: number | undefined) {
-                if (
-                  getFieldValue("discountType") === "PERCENTAGE" &&
-                  Number(value) > 100
-                ) {
+                if (!value || Number(value) <= 0) {
+                  return Promise.reject(new Error("Giá trị giảm phải lớn hơn 0"));
+                }
+                if (isPercentType(getFieldValue("discountType")) && Number(value) > 100) {
                   return Promise.reject(
                     new Error("Giảm theo phần trăm không được lớn hơn 100"),
                   );
@@ -292,18 +357,77 @@ const CouponManagementPage = () => {
           label="Đơn tối thiểu"
           min={0}
           fieldProps={{ precision: 0 }}
+          rules={[
+            {
+              validator(_: RuleObject, value: number | undefined) {
+                if (value != null && Number(value) < 0) {
+                  return Promise.reject(new Error("Đơn tối thiểu không được âm"));
+                }
+                return Promise.resolve();
+              },
+            },
+          ]}
         />
+        <ProFormDependency name={["discountType"]}>
+          {({ discountType }) =>
+            isPercentType(discountType) ? (
+              <ProFormDigit
+                name="maxDiscountAmount"
+                label="Giảm tối đa"
+                min={1}
+                fieldProps={{ precision: 0 }}
+                rules={[
+                  { required: true, message: "Vui lòng nhập mức giảm tối đa" },
+                  {
+                    validator(_: RuleObject, value: number | undefined) {
+                      if (!value || Number(value) <= 0) {
+                        return Promise.reject(new Error("Mức giảm tối đa phải lớn hơn 0"));
+                      }
+                      return Promise.resolve();
+                    },
+                  },
+                ]}
+              />
+            ) : null
+          }
+        </ProFormDependency>
         <ProFormDigit
-          name="maxDiscountAmount"
-          label="Giảm tối đa"
+          name="usageLimit"
+          label="Tổng lượt sử dụng"
+          tooltip="Tổng số lượt mã được sử dụng trên toàn hệ thống. Một khách hàng có thể dùng lại mã này nhiều lần nếu mã còn lượt."
           min={1}
+          placeholder="Bỏ trống nếu không giới hạn"
           fieldProps={{ precision: 0 }}
           rules={[
-            (({ getFieldValue }) => ({
+            {
               validator(_: RuleObject, value: number | undefined) {
-                if (getFieldValue("discountType") === "PERCENTAGE" && !value) {
+                if (value != null && Number(value) <= 0) {
+                  return Promise.reject(new Error("Tổng lượt sử dụng phải lớn hơn 0"));
+                }
+                return Promise.resolve();
+              },
+            },
+          ]}
+        />
+        <ProFormDateTimePicker
+          name="startDate"
+          label="Thời gian bắt đầu"
+        />
+        <ProFormDateTimePicker
+          name="endDate"
+          label="Thời gian kết thúc"
+          rules={[
+            (({ getFieldValue }) => ({
+              validator(_: RuleObject, value: any) {
+                const startDate = getFieldValue("startDate");
+                if (startDate && value && dayjs(value).isBefore(dayjs(startDate))) {
                   return Promise.reject(
-                    new Error("Coupon phần trăm phải có mức giảm tối đa"),
+                    new Error("Thời gian kết thúc phải lớn hơn thời gian bắt đầu"),
+                  );
+                }
+                if (getFieldValue("isActive") && value && dayjs(value).isBefore(dayjs())) {
+                  return Promise.reject(
+                    new Error("Không thể kích hoạt mã giảm giá đã hết hạn"),
                   );
                 }
                 return Promise.resolve();
@@ -311,17 +435,6 @@ const CouponManagementPage = () => {
             })) as CouponFormRuleFactory,
           ]}
         />
-        <ProFormDigit
-          name="usageLimit"
-          label="Giới hạn lượt sử dụng"
-          min={1}
-          fieldProps={{ precision: 0 }}
-          rules={[
-            { required: true, message: "Vui lòng nhập giới hạn sử dụng" },
-          ]}
-        />
-        <ProFormDateTimePicker name="startDate" label="Thời gian bắt đầu" />
-        <ProFormDateTimePicker name="endDate" label="Thời gian kết thúc" />
         <ProFormSwitch name="isActive" label="Kích hoạt" />
       </ModalForm>
     </>

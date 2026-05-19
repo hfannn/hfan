@@ -38,6 +38,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.text.Normalizer;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
@@ -167,10 +168,14 @@ public class ProductServiceImpl implements ProductService {
             Long brandId,
             String sizeValue,
             String color,
+            String material,
             BigDecimal minPrice,
             BigDecimal maxPrice,
             String sort,
-            Boolean isSale
+            Boolean isSale,
+            Long campaignId,
+            BigDecimal discountMin,
+            BigDecimal discountMax
     ) {
         Pageable pageable = PageRequest.of(page, size, resolveSort(sort));
         Page<Product> pageData = productRepository.filterProducts(
@@ -180,12 +185,19 @@ public class ProductServiceImpl implements ProductService {
                 brandId,
                 StringUtils.hasText(sizeValue) ? sizeValue.trim().toLowerCase() : null,
                 StringUtils.hasText(color) ? color.trim().toLowerCase() : null,
+                StringUtils.hasText(material) ? material.trim().toLowerCase() : null,
                 minPrice,
                 maxPrice,
                 isSale,
+                campaignId,
+                discountMin,
+                discountMax,
                 OffsetDateTime.now()
         );
-        return PageMapper.toPageResponse(pageData, this::mapProductToSaleAwareListResponse);
+        PageResponse<ProductListResponse> response =
+                PageMapper.toPageResponse(pageData, this::mapProductToSaleAwareListResponse);
+        response.setContent(sortProductListResponse(response.getContent(), sort));
+        return response;
     }
 
     @Override
@@ -374,13 +386,30 @@ public class ProductServiceImpl implements ProductService {
     }
 
     private Sort resolveSort(String sort) {
-        if ("priceAsc".equalsIgnoreCase(sort) || "price_asc".equalsIgnoreCase(sort)) {
-            return Sort.by(Sort.Direction.ASC, "id");
-        }
-        if ("priceDesc".equalsIgnoreCase(sort) || "price_desc".equalsIgnoreCase(sort)) {
-            return Sort.by(Sort.Direction.DESC, "id");
-        }
         return Sort.by(Sort.Direction.DESC, "id");
+    }
+
+    private List<ProductListResponse> sortProductListResponse(
+            List<ProductListResponse> content,
+            String sort
+    ) {
+        List<ProductListResponse> sorted = new ArrayList<>(content);
+        if ("priceAsc".equalsIgnoreCase(sort) || "price_asc".equalsIgnoreCase(sort)) {
+            sorted.sort(Comparator.comparing(item -> nullSafePrice(item.getMinSalePrice())));
+        } else if ("priceDesc".equalsIgnoreCase(sort) || "price_desc".equalsIgnoreCase(sort)) {
+            sorted.sort(Comparator.comparing(
+                    (ProductListResponse item) -> nullSafePrice(item.getMinSalePrice())
+            ).reversed());
+        } else if ("discountDesc".equalsIgnoreCase(sort) || "discount_desc".equalsIgnoreCase(sort)) {
+            sorted.sort(Comparator.comparing(
+                    (ProductListResponse item) -> nullSafePrice(item.getDiscountPercent())
+            ).reversed());
+        }
+        return sorted;
+    }
+
+    private BigDecimal nullSafePrice(BigDecimal value) {
+        return value == null ? BigDecimal.ZERO : value;
     }
 
     private ProductListResponse mapProductToSaleAwareListResponse(Product product) {
@@ -446,6 +475,10 @@ public class ProductServiceImpl implements ProductService {
         response.setActiveVariantCount(activeVariants.size());
         response.setIsActive(product.getIsActive());
         return response;
+    }
+
+    public ProductListResponse mapProductForPublicCard(Product product) {
+        return mapProductToSaleAwareListResponse(product);
     }
 
     private ProductVariantResponse mapVariantToSaleAwareResponse(ProductVariant variant) {

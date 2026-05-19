@@ -32,7 +32,7 @@ public class PaymentServiceImpl implements PaymentService {
     @Override
     public PaymentResponse getById(Long id) {
         Payment payment = paymentRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Payment not found with id: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy thanh toán với ID: " + id));
         return mapToResponse(payment);
     }
 
@@ -40,9 +40,9 @@ public class PaymentServiceImpl implements PaymentService {
     @Transactional
     public PaymentResponse create(PaymentRequest request) {
         Order order = orderRepository.findById(request.getOrderId())
-                .orElseThrow(() -> new ResourceNotFoundException("Order not found with id: " + request.getOrderId()));
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy đơn hàng với ID: " + request.getOrderId()));
         PaymentMethod paymentMethod = paymentMethodRepository.findById(request.getPaymentMethodId())
-                .orElseThrow(() -> new ResourceNotFoundException("PaymentMethod not found with id: " + request.getPaymentMethodId()));
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy phương thức thanh toán với ID: " + request.getPaymentMethodId()));
 
         Payment payment = Payment.builder()
                 .order(order)
@@ -59,7 +59,7 @@ public class PaymentServiceImpl implements PaymentService {
     @Transactional
     public PaymentResponse update(Long id, PaymentRequest request) {
         Payment payment = paymentRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Payment not found with id: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy thanh toán với ID: " + id));
 
         payment.setAmount(request.getAmount());
         payment.setStatus(request.getStatus());

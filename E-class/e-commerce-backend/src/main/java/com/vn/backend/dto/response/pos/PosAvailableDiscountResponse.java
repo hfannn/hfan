@@ -22,6 +22,7 @@ public class PosAvailableDiscountResponse {
     private Integer issuedQuantity;
     private Long usedCount;
     private Integer remainingCount;
+    private Integer remainingUses;
     private Double usedPercent;
     private Double remainingPercent;
 
@@ -30,5 +31,8 @@ public class PosAvailableDiscountResponse {
     private Boolean isActive;
 
     private BigDecimal estimatedDiscountAmount;
+    private Boolean eligible;
+    private String ineligibleReason;
     private Boolean bestVoucher;
+    private Boolean isBest;
 }

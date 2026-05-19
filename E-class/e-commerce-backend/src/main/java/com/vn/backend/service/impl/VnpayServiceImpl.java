@@ -74,6 +74,7 @@ public class VnpayServiceImpl implements com.vn.backend.service.VnpayService {
     private final CouponRepository couponRepository;
     private final CouponUsageRepository couponUsageRepository;
     private final OrderStatusHistoryRepository orderStatusHistoryRepository;
+    private final OrderInventoryService orderInventoryService;
 
 
     @Override
@@ -222,13 +223,13 @@ public class VnpayServiceImpl implements com.vn.backend.service.VnpayService {
         String secureHash = params.get("vnp_SecureHash");
 
         if (!isValidChecksum(params, secureHash)) {
-            return "{\"RspCode\":\"97\",\"Message\":\"Invalid Checksum\"}";
+            return "{\"RspCode\":\"97\",\"Message\":\"Chữ ký không hợp lệ\"}";
         }
 
         Payment payment = paymentRepository.findByProviderTxnRef(txnRef).orElse(null);
 
         if (payment == null) {
-            return "{\"RspCode\":\"01\",\"Message\":\"Order not found\"}";
+            return "{\"RspCode\":\"01\",\"Message\":\"Không tìm thấy đơn hàng\"}";
         }
 
         if (isPaymentSuccess(responseCode, transactionStatus)) {
@@ -299,7 +300,7 @@ public class VnpayServiceImpl implements com.vn.backend.service.VnpayService {
 
         if (hasCoupon) {
             if (order.getCustomer() == null) {
-                throw new IllegalArgumentException("Hóa đơn phải có khách hàng để dùng coupon");
+                throw new IllegalArgumentException("Vui lòng chọn khách hàng để áp dụng mã giảm giá.");
             }
 
             Coupon coupon = couponRepository.findById(request.getCouponId())
@@ -466,13 +467,13 @@ public class VnpayServiceImpl implements com.vn.backend.service.VnpayService {
         String secureHash = params.get("vnp_SecureHash");
 
         if (!isValidChecksum(params, secureHash)) {
-            return "{\"RspCode\":\"97\",\"Message\":\"Invalid Checksum\"}";
+            return "{\"RspCode\":\"97\",\"Message\":\"Chữ ký không hợp lệ\"}";
         }
 
         Payment payment = paymentRepository.findByProviderTxnRef(txnRef).orElse(null);
 
         if (payment == null) {
-            return "{\"RspCode\":\"01\",\"Message\":\"Order not found\"}";
+            return "{\"RspCode\":\"01\",\"Message\":\"Không tìm thấy đơn hàng\"}";
         }
 
         if (isPaymentSuccess(responseCode, transactionStatus)) {
@@ -529,6 +530,11 @@ public class VnpayServiceImpl implements com.vn.backend.service.VnpayService {
 
         Order order = payment.getOrder();
         if (order != null) {
+            if (ORDER_TYPE_ONLINE.equalsIgnoreCase(order.getOrderType())
+                    && !Boolean.TRUE.equals(order.getInventoryReserved())) {
+                orderInventoryService.reserveStockForOnlineOrder(order);
+            }
+
             order.setCustomerPaid(defaultZero(payment.getAmount()));
 
             // Giữ nguyên PENDING để admin xác nhận thủ công
@@ -558,14 +564,26 @@ public class VnpayServiceImpl implements com.vn.backend.service.VnpayService {
                         + transactionStatus
         );
         paymentRepository.save(payment);
+
+        Order order = payment.getOrder();
+        if (order != null && ORDER_TYPE_ONLINE.equalsIgnoreCase(order.getOrderType())) {
+            String previousStatus = order.getStatus();
+            orderInventoryService.releaseStockForOrder(order, "ONLINE_VNPAY_FAILED_" + source);
+            if (!ORDER_STATUS_CANCELLED.equalsIgnoreCase(order.getStatus())) {
+                order.setStatus(ORDER_STATUS_CANCELLED);
+                saveOrderStatusHistory(order, previousStatus, ORDER_STATUS_CANCELLED);
+            }
+            couponUsageRepository.deleteByOrder_Id(order.getId());
+            orderRepository.save(order);
+        }
     }
 
     private Customer resolveCustomer(Long userId) {
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy người dùng."));
 
         return customerRepository.findByUserProfileId(user.getUserProfile().getId())
-                .orElseThrow(() -> new ResourceNotFoundException("Customer not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy khách hàng."));
     }
 
     private String generateUniqueTxnRef(String prefix, Long orderId) {
@@ -597,7 +615,7 @@ public class VnpayServiceImpl implements com.vn.backend.service.VnpayService {
         }
 
         if (coupon.getUsageLimit() != null && coupon.getUsageLimit() > 0) {
-            long usedCount = couponUsageRepository.countByCoupon_Id(coupon.getId());
+            long usedCount = couponUsageRepository.countValidUsagesByCouponId(coupon.getId());
             if (usedCount >= coupon.getUsageLimit()) {
                 return false;
             }
@@ -607,14 +625,21 @@ public class VnpayServiceImpl implements com.vn.backend.service.VnpayService {
             return false;
         }
 
+        if (coupon.getDiscountValue() == null || coupon.getDiscountValue().compareTo(BigDecimal.ZERO) <= 0) {
+            return false;
+        }
+
+        String normalizedType = coupon.getDiscountType() == null ? "" : coupon.getDiscountType().trim().toUpperCase();
+        if (("PERCENTAGE".equals(normalizedType) || "PERCENT".equals(normalizedType))
+                && coupon.getDiscountValue().compareTo(BigDecimal.valueOf(100)) > 0) {
+            return false;
+        }
+
         if (coupon.getMinOrderValue() != null && subtotal.compareTo(coupon.getMinOrderValue()) < 0) {
             return false;
         }
 
-        return couponUsageRepository.countByCoupon_IdAndCustomer_Id(
-                coupon.getId(),
-                order.getCustomer().getId()
-        ) == 0;
+        return true;
     }
 
 
@@ -631,14 +656,14 @@ public class VnpayServiceImpl implements com.vn.backend.service.VnpayService {
         String normalizedDiscountType = discountType.trim().toUpperCase();
         BigDecimal discountAmount = BigDecimal.ZERO;
 
-        if ("PERCENTAGE".equals(normalizedDiscountType)) {
+        if ("PERCENTAGE".equals(normalizedDiscountType) || "PERCENT".equals(normalizedDiscountType)) {
             discountAmount = subtotal.multiply(discountValue)
                     .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
 
             if (maxDiscountAmount != null && discountAmount.compareTo(maxDiscountAmount) > 0) {
                 discountAmount = maxDiscountAmount;
             }
-        } else if ("FIXED_AMOUNT".equals(normalizedDiscountType)) {
+        } else if ("FIXED_AMOUNT".equals(normalizedDiscountType) || "FIXED".equals(normalizedDiscountType)) {
             discountAmount = discountValue;
         }
 

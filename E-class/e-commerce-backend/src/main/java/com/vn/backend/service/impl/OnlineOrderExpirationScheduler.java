@@ -8,11 +8,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import com.vn.backend.entity.OrderItem;
-import com.vn.backend.entity.ProductVariant;
-import com.vn.backend.repository.ProductVariantRepository;
-
 import java.time.OffsetDateTime;
 import java.util.Comparator;
 import java.util.List;
@@ -35,7 +30,7 @@ public class OnlineOrderExpirationScheduler {
     private final PaymentRepository paymentRepository;
     private final CouponUsageRepository couponUsageRepository;
     private final OrderStatusHistoryRepository orderStatusHistoryRepository;
-    private final ProductVariantRepository productVariantRepository;
+    private final OrderInventoryService orderInventoryService;
 
     @Scheduled(fixedDelay = 60000)
     @Transactional
@@ -72,7 +67,7 @@ public class OnlineOrderExpirationScheduler {
             latestPayment.setNote("Hết thời gian thanh toán VNPAY sau " + EXPIRE_MINUTES + " phút");
             paymentRepository.save(latestPayment);
 
-            restoreStockForOrder(order);
+            orderInventoryService.releaseStockForOrder(order, "ONLINE_VNPAY_EXPIRED");
 
             String previousStatus = order.getStatus();
             order.setStatus(ORDER_STATUS_CANCELLED);
@@ -88,23 +83,6 @@ public class OnlineOrderExpirationScheduler {
                     .build();
 
             orderStatusHistoryRepository.save(history);
-        }
-    }
-
-    private void restoreStockForOrder(Order order) {
-        if (order == null || order.getItems() == null) {
-            return;
-        }
-
-        for (OrderItem item : order.getItems()) {
-            ProductVariant variant = item.getProductVariant();
-            if (variant == null) {
-                continue;
-            }
-
-            int currentStock = variant.getStockQuantity() == null ? 0 : variant.getStockQuantity();
-            variant.setStockQuantity(currentStock + item.getQuantity());
-            productVariantRepository.save(variant);
         }
     }
 }

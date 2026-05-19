@@ -43,6 +43,12 @@ import {
   getWards,
 } from "@/services/ghnShippingService";
 import { resolveImageUrl } from "@/utils/utils";
+import { formatKnownVariantAttributes } from "@/utils/productAttributeLabel";
+import VoucherSelectorModal, {
+  buildVoucherOptions,
+  getBestVoucher,
+  VoucherOption,
+} from "@/components/VoucherSelectorModal";
 
 const { Title, Text } = Typography;
 
@@ -61,6 +67,36 @@ interface Address {
   address: string;
   note?: string;
 }
+
+const VIETNAM_PHONE_REGEX = /^(0)(3|5|7|8|9)[0-9]{8}$/;
+const DANGEROUS_TEXT_REGEX = /[<>{}\[\]]|script/i;
+
+const trimText = (value?: string) => String(value || "").trim();
+
+const isValidPersonName = (value?: string) => {
+  const text = trimText(value);
+  return (
+    text.length >= 2 &&
+    text.length <= 100 &&
+    !/^\d+$/.test(text) &&
+    !DANGEROUS_TEXT_REGEX.test(text)
+  );
+};
+
+const isValidAddressDetail = (value?: string) => {
+  const text = trimText(value);
+  return (
+    text.length >= 5 &&
+    text.length <= 255 &&
+    !/^\d+$/.test(text) &&
+    !DANGEROUS_TEXT_REGEX.test(text)
+  );
+};
+
+const isValidOptionalNote = (value?: string) => {
+  const text = trimText(value);
+  return text.length <= 255 && !DANGEROUS_TEXT_REGEX.test(text);
+};
 
 const CheckoutPage = () => {
   const location = useLocation();
@@ -87,6 +123,9 @@ const CheckoutPage = () => {
   const [availableVouchers, setAvailableVouchers] = useState<any[]>([]);
   const [voucherApplying, setVoucherApplying] = useState(false);
   const [voucherError, setVoucherError] = useState("");
+  const [voucherPickerOpen, setVoucherPickerOpen] = useState(false);
+  const [manualVoucherSelection, setManualVoucherSelection] = useState(false);
+  const [userRemovedVoucher, setUserRemovedVoucher] = useState(false);
   const [quoteError, setQuoteError] = useState("");
 
   const [shippingError, setShippingError] = useState("");
@@ -98,6 +137,7 @@ const CheckoutPage = () => {
   const hasAppliedDefaultAddressRef = useRef(false);
   const latestQuoteRequestRef = useRef(0);
   const latestVoucherRequestRef = useRef(0);
+  const lastAutoApplyContextRef = useRef("");
 
   const [provinces, setProvinces] = useState<GhnProvince[]>([]);
   const [districts, setDistricts] = useState<GhnDistrict[]>([]);
@@ -201,11 +241,33 @@ const CheckoutPage = () => {
   const formatMoney = (value?: number | string) =>
     `${new Intl.NumberFormat("vi-VN").format(Number(value || 0))} ₫`;
 
-  const clearAppliedVoucher = () => {
+  const clearAppliedVoucher = async () => {
+    const voucherRequestId = ++latestVoucherRequestRef.current;
+    setManualVoucherSelection(true);
+    setUserRemovedVoucher(true);
     setVoucherCode("");
     setAppliedVoucher(null);
     setAppliedVoucherInfo(null);
     setVoucherError("");
+    try {
+      setVoucherApplying(true);
+      await fetchQuote(null, {
+        silent: true,
+        source: "voucher",
+        clearVoucherOnError: false,
+      });
+    } catch (error: any) {
+      if (voucherRequestId === latestVoucherRequestRef.current) {
+        setVoucherError(
+          error?.response?.data?.message ||
+            "Không thể bỏ áp dụng mã giảm giá. Vui lòng thử lại.",
+        );
+      }
+    } finally {
+      if (voucherRequestId === latestVoucherRequestRef.current) {
+        setVoucherApplying(false);
+      }
+    }
   };
 
   const getCheckoutItemPrice = (item: any) => {
@@ -275,6 +337,49 @@ const CheckoutPage = () => {
   const getVoucherInputValue = (voucher: any) =>
     String(voucher?.code || voucher?.name || "").trim();
 
+  const hasCompleteShippingInfo = Boolean(
+    selectedAddress && selectedDistrictId && selectedWardCode,
+  );
+
+  const autoApplyContext = useMemo(
+    () =>
+      [
+        totalQuantity,
+        subtotalBeforeVoucher,
+        selectedProvinceId || "",
+        selectedDistrictId || "",
+        selectedWardCode || "",
+        selectedAddress || "",
+        selectedProvinceName || "",
+        selectedDistrictName || "",
+        selectedWardName || "",
+      ].join("|"),
+    [
+      totalQuantity,
+      subtotalBeforeVoucher,
+      selectedProvinceId,
+      selectedDistrictId,
+      selectedWardCode,
+      selectedAddress,
+      selectedProvinceName,
+      selectedDistrictName,
+      selectedWardName,
+    ],
+  );
+
+  const voucherOptions = useMemo(
+    () =>
+      buildVoucherOptions(
+        availableVouchers.map((voucher) => ({
+          ...voucher,
+          remainingUses:
+            voucher.remainingUses ?? voucher.remainingCount ?? voucher.remainingUsage,
+        })),
+        subtotalBeforeVoucher,
+      ),
+    [availableVouchers, subtotalBeforeVoucher],
+  );
+
   const isVoucherRelatedError = (value?: string) => {
     const text = String(value || "")
       .normalize("NFD")
@@ -287,6 +392,15 @@ const CheckoutPage = () => {
       text.includes("khuyen mai") ||
       text.includes("coupon")
     );
+  };
+
+  const isStockRelatedError = (value?: string) => {
+    const text = String(value || "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase();
+
+    return text.includes("khong du ton") || text.includes("het hang");
   };
 
   const buildQuotePayload = (nextVoucherCode: string | null = appliedVoucher) => {
@@ -443,7 +557,51 @@ const CheckoutPage = () => {
     message.success("Đã đặt địa chỉ mặc định.");
   };
 
+  const validateSavedAddress = (address: Address) => {
+    if (!trimText(address.fullName)) {
+      throw new Error("Vui lòng nhập họ tên.");
+    }
+
+    if (!isValidPersonName(address.fullName)) {
+      throw new Error(
+        trimText(address.fullName).length < 2
+          ? "Họ tên phải có ít nhất 2 ký tự."
+          : "Họ tên không hợp lệ.",
+      );
+    }
+
+    if (!VIETNAM_PHONE_REGEX.test(trimText(address.phone).replace(/\s+/g, ""))) {
+      throw new Error("Số điện thoại không hợp lệ.");
+    }
+
+    if (!isValidAddressDetail(address.address)) {
+      throw new Error(
+        trimText(address.address).length < 5
+          ? "Địa chỉ chi tiết phải có ít nhất 5 ký tự."
+          : "Địa chỉ chi tiết không hợp lệ.",
+      );
+    }
+
+    if (!trimText(address.provinceName || address.province)) {
+      throw new Error("Vui lòng chọn Tỉnh/Thành phố.");
+    }
+
+    if (!trimText(address.districtName || address.district)) {
+      throw new Error("Vui lòng chọn Quận/Huyện.");
+    }
+
+    if (!trimText(address.wardName || address.ward)) {
+      throw new Error("Vui lòng chọn Phường/Xã.");
+    }
+
+    if (!isValidOptionalNote(address.note)) {
+      throw new Error("Ghi chú giao hàng không hợp lệ.");
+    }
+  };
+
   const resolveSavedAddress = async (address: Address) => {
+    validateSavedAddress(address);
+
     const provinceName = address.provinceName || address.province;
     const districtName = address.districtName || address.district;
     const wardName = address.wardName || address.ward;
@@ -552,7 +710,7 @@ const CheckoutPage = () => {
 
         setAvailableVouchers(coupons);
       } catch (error) {
-        console.error("Không thể tải danh sách voucher:", error);
+        console.error("Không thể tải danh sách mã giảm giá:", error);
         setAvailableVouchers([]);
       }
     };
@@ -640,10 +798,10 @@ const CheckoutPage = () => {
           setAppliedVoucherInfo(null);
           setVoucherError(
             quoteData.voucherMessage ||
-              "Voucher không còn phù hợp với đơn hàng hiện tại.",
+              "Mã giảm giá không còn phù hợp với đơn hàng hiện tại.",
           );
           message.warning(
-            "Voucher không còn phù hợp với đơn hàng hiện tại và đã được bỏ áp dụng.",
+            "Mã giảm giá không còn phù hợp với đơn hàng hiện tại và đã được bỏ áp dụng.",
           );
         }
       } catch (error: any) {
@@ -652,10 +810,10 @@ const CheckoutPage = () => {
           setAppliedVoucherInfo(null);
           setVoucherError(
             error?.response?.data?.message ||
-              "Voucher không còn phù hợp với đơn hàng hiện tại.",
+              "Mã giảm giá không còn phù hợp với đơn hàng hiện tại.",
           );
           message.warning(
-            "Voucher không còn phù hợp với đơn hàng hiện tại và đã được bỏ áp dụng.",
+            "Mã giảm giá không còn phù hợp với đơn hàng hiện tại và đã được bỏ áp dụng.",
           );
         }
       }
@@ -673,6 +831,54 @@ const CheckoutPage = () => {
     selectedProvinceName,
     selectedDistrictName,
     selectedWardName,
+  ]);
+
+  useEffect(() => {
+    if (lastAutoApplyContextRef.current && lastAutoApplyContextRef.current !== autoApplyContext) {
+      setUserRemovedVoucher(false);
+    }
+    lastAutoApplyContextRef.current = autoApplyContext;
+  }, [autoApplyContext]);
+
+  useEffect(() => {
+    if (
+      !items.length ||
+      !hasCompleteShippingInfo ||
+      subtotalBeforeVoucher <= 0 ||
+      quoteLoading ||
+      voucherApplying ||
+      userRemovedVoucher
+    ) {
+      return;
+    }
+
+    const current = appliedVoucher
+      ? voucherOptions.find(
+          (voucher) =>
+            voucher.code.toLowerCase() === appliedVoucher.toLowerCase(),
+        )
+      : null;
+
+    if (manualVoucherSelection && current?.eligible) {
+      return;
+    }
+
+    const best = getBestVoucher(voucherOptions);
+    if (!best || appliedVoucher?.toLowerCase() === best.code.toLowerCase()) {
+      return;
+    }
+
+    applyVoucherFromOption(best, false);
+  }, [
+    items.length,
+    hasCompleteShippingInfo,
+    subtotalBeforeVoucher,
+    quoteLoading,
+    voucherApplying,
+    userRemovedVoucher,
+    appliedVoucher,
+    manualVoucherSelection,
+    voucherOptions,
   ]);
 
   useEffect(() => {
@@ -705,16 +911,16 @@ const CheckoutPage = () => {
       const resolvedAddress = await resolveSavedAddress(address);
 
       form.setFieldsValue({
-        customerName: address.fullName,
-        phone: address.phone,
+        customerName: trimText(address.fullName),
+        phone: trimText(address.phone).replace(/\s+/g, ""),
         provinceId: resolvedAddress.provinceId,
         districtId: resolvedAddress.districtId,
         wardCode: resolvedAddress.wardCode,
         provinceName: resolvedAddress.provinceName,
         districtName: resolvedAddress.districtName,
         wardName: resolvedAddress.wardName,
-        address: address.address,
-        note: address.note,
+        address: trimText(address.address),
+        note: trimText(address.note),
       });
 
       setShippingError("");
@@ -810,6 +1016,7 @@ const CheckoutPage = () => {
         return;
       }
       setAppliedVoucher(normalizedVoucherCode);
+      setUserRemovedVoucher(false);
       setAppliedVoucherInfo(
         voucherMeta ||
           quoteData,
@@ -836,7 +1043,80 @@ const CheckoutPage = () => {
     }
   };
 
+  const applyVoucherFromOption = async (
+    voucher: VoucherOption,
+    markManual = true,
+  ) => {
+    const normalizedVoucherCode = String(voucher.code || "").trim();
+    if (!normalizedVoucherCode || voucherApplying) {
+      return;
+    }
+
+    if (markManual) {
+      setManualVoucherSelection(true);
+      setUserRemovedVoucher(false);
+    }
+
+    const voucherRequestId = ++latestVoucherRequestRef.current;
+    try {
+      setVoucherApplying(true);
+      setVoucherError("");
+      setVoucherCode(normalizedVoucherCode);
+      const quoteData = await fetchQuote(normalizedVoucherCode, {
+        silent: true,
+        source: "voucher",
+        clearVoucherOnError: true,
+      });
+      if (voucherRequestId !== latestVoucherRequestRef.current || !quoteData) {
+        return;
+      }
+      if (quoteData.voucherValid === false) {
+        const errorMessage =
+          quoteData.voucherMessage ||
+          "Mã giảm giá không hợp lệ hoặc không đủ điều kiện áp dụng.";
+        setAppliedVoucher(null);
+        setAppliedVoucherInfo(null);
+        setVoucherError(errorMessage);
+        if (markManual) {
+          message.error(errorMessage);
+        }
+        return;
+      }
+      setAppliedVoucher(normalizedVoucherCode);
+      setUserRemovedVoucher(false);
+      setAppliedVoucherInfo(voucher.raw || voucher || quoteData);
+      if (markManual) {
+        message.success(`Áp dụng mã "${normalizedVoucherCode}" thành công!`);
+      }
+      setVoucherPickerOpen(false);
+    } catch (error: any) {
+      if (voucherRequestId === latestVoucherRequestRef.current) {
+        const errorMessage =
+          error.response?.data?.message ||
+          "Mã giảm giá không hợp lệ hoặc đã xảy ra lỗi.";
+        setVoucherError(errorMessage);
+        setAppliedVoucher(null);
+        setAppliedVoucherInfo(null);
+        if (markManual) {
+          message.error(errorMessage);
+        }
+      }
+    } finally {
+      if (voucherRequestId === latestVoucherRequestRef.current) {
+        setVoucherApplying(false);
+      }
+    }
+  };
+
   const handlePlaceOrder = async (values: any) => {
+    const normalizedValues = {
+      ...values,
+      customerName: trimText(values.customerName),
+      phone: trimText(values.phone).replace(/\s+/g, ""),
+      address: trimText(values.address),
+      note: trimText(values.note),
+    };
+
     if (!quote) {
       message.warning("Vui lòng đợi hệ thống tính lại tổng tiền đơn hàng.");
       return;
@@ -854,22 +1134,22 @@ const CheckoutPage = () => {
 
     const orderData = {
       shippingInfo: {
-        customerName: values.customerName,
-        phone: values.phone,
-        address: values.address,
-        province: values.provinceName,
-        district: values.districtName,
-        ward: values.wardName,
-        provinceId: values.provinceId,
-        districtId: values.districtId,
-        wardCode: values.wardCode,
-        provinceName: values.provinceName,
-        districtName: values.districtName,
-        wardName: values.wardName,
-        note: values.note,
+        customerName: normalizedValues.customerName,
+        phone: normalizedValues.phone,
+        address: normalizedValues.address,
+        province: normalizedValues.provinceName,
+        district: normalizedValues.districtName,
+        ward: normalizedValues.wardName,
+        provinceId: normalizedValues.provinceId,
+        districtId: normalizedValues.districtId,
+        wardCode: normalizedValues.wardCode,
+        provinceName: normalizedValues.provinceName,
+        districtName: normalizedValues.districtName,
+        wardName: normalizedValues.wardName,
+        note: normalizedValues.note,
       },
-      shouldUpdateProfile: values.saveAddress,
-      paymentMethodCode: values.paymentMethod,
+      shouldUpdateProfile: normalizedValues.saveAddress,
+      paymentMethodCode: normalizedValues.paymentMethod,
       items: (quote?.items || []).map((item: any) => ({
         variantId: item.variantId,
         quantity: item.quantity,
@@ -877,7 +1157,7 @@ const CheckoutPage = () => {
       voucherCode: appliedVoucher || undefined,
     };
 
-    if (values.paymentMethod === "VNPAY") {
+    if (normalizedValues.paymentMethod === "VNPAY") {
       await submitOrderAndRedirectVnpay(orderData);
       return;
     }
@@ -900,11 +1180,13 @@ const CheckoutPage = () => {
     } catch (error: any) {
       const errorMessage =
         error.response?.data?.message || "Đặt hàng thất bại. Vui lòng thử lại.";
-      if (appliedVoucher && isVoucherRelatedError(errorMessage)) {
+      if (isStockRelatedError(errorMessage)) {
+        message.error("Sản phẩm không đủ tồn kho, vui lòng kiểm tra lại giỏ hàng.");
+      } else if (appliedVoucher && isVoucherRelatedError(errorMessage)) {
         setAppliedVoucher(null);
         setAppliedVoucherInfo(null);
         setVoucherError(errorMessage);
-        message.error(`${errorMessage} Vui lòng đặt hàng lại không dùng voucher.`);
+        message.error(`${errorMessage} Vui lòng đặt hàng lại không dùng mã giảm giá.`);
       } else {
         message.error(errorMessage);
       }
@@ -935,11 +1217,13 @@ const CheckoutPage = () => {
         error.response?.data?.message ||
         error.message ||
         "Không thể khởi tạo thanh toán VNPAY.";
-      if (appliedVoucher && isVoucherRelatedError(errorMessage)) {
+      if (isStockRelatedError(errorMessage)) {
+        message.error("Sản phẩm không đủ tồn kho, vui lòng kiểm tra lại giỏ hàng.");
+      } else if (appliedVoucher && isVoucherRelatedError(errorMessage)) {
         setAppliedVoucher(null);
         setAppliedVoucherInfo(null);
         setVoucherError(errorMessage);
-        message.error(`${errorMessage} Vui lòng đặt hàng lại không dùng voucher.`);
+        message.error(`${errorMessage} Vui lòng đặt hàng lại không dùng mã giảm giá.`);
       } else {
         message.error(errorMessage);
       }
@@ -969,7 +1253,15 @@ const CheckoutPage = () => {
         Thanh toán
       </Title>
 
-      <Form form={form} layout="vertical" onFinish={handlePlaceOrder}>
+      <Form
+        form={form}
+        layout="vertical"
+        onFinish={handlePlaceOrder}
+        scrollToFirstError
+        onFinishFailed={() => {
+          message.warning("Vui lòng kiểm tra lại thông tin giao hàng.");
+        }}
+      >
         <Row gutter={[32, 32]}>
           <Col xs={24} lg={14}>
             <Card
@@ -981,7 +1273,25 @@ const CheckoutPage = () => {
               <Form.Item
                 name="customerName"
                 label="Họ và tên người nhận"
-                rules={[{ required: true, message: "Vui lòng nhập họ tên!" }]}
+                normalize={(value) => trimText(value)}
+                rules={[
+                  { required: true, message: "Vui lòng nhập họ tên." },
+                  {
+                    validator: (_, value) => {
+                      const text = trimText(value);
+                      if (!text) {
+                        return Promise.resolve();
+                      }
+                      if (text.length < 2) {
+                        return Promise.reject(new Error("Họ tên phải có ít nhất 2 ký tự."));
+                      }
+                      if (!isValidPersonName(text)) {
+                        return Promise.reject(new Error("Họ tên không hợp lệ."));
+                      }
+                      return Promise.resolve();
+                    },
+                  },
+                ]}
               >
                 <Input placeholder="Nguyễn Văn A" />
               </Form.Item>
@@ -989,8 +1299,13 @@ const CheckoutPage = () => {
               <Form.Item
                 name="phone"
                 label="Số điện thoại"
+                normalize={(value) => trimText(value).replace(/\s+/g, "")}
                 rules={[
-                  { required: true, message: "Vui lòng nhập số điện thoại!" },
+                  { required: true, message: "Vui lòng nhập số điện thoại." },
+                  {
+                    pattern: VIETNAM_PHONE_REGEX,
+                    message: "Số điện thoại không hợp lệ.",
+                  },
                 ]}
               >
                 <Input placeholder="Ví dụ: 0123456789" />
@@ -1005,7 +1320,7 @@ const CheckoutPage = () => {
                     rules={[
                       {
                         required: true,
-                        message: "Vui lòng chọn tỉnh/thành phố!",
+                        message: "Vui lòng chọn Tỉnh/Thành phố.",
                       },
                     ]}
                   >
@@ -1031,7 +1346,7 @@ const CheckoutPage = () => {
                     name="districtId"
                     label="Quận/Huyện"
                     rules={[
-                      { required: true, message: "Vui lòng chọn quận/huyện!" },
+                      { required: true, message: "Vui lòng chọn Quận/Huyện." },
                     ]}
                   >
                     <Select
@@ -1059,7 +1374,7 @@ const CheckoutPage = () => {
                     name="wardCode"
                     label="Phường/Xã"
                     rules={[
-                      { required: true, message: "Vui lòng chọn phường/xã!" },
+                      { required: true, message: "Vui lòng chọn Phường/Xã." },
                     ]}
                   >
                     <Select
@@ -1084,10 +1399,30 @@ const CheckoutPage = () => {
                   <Form.Item
                     name="address"
                     label="Địa chỉ chi tiết"
+                    normalize={(value) => trimText(value)}
                     rules={[
                       {
                         required: true,
-                        message: "Vui lòng nhập địa chỉ chi tiết!",
+                        message: "Vui lòng nhập địa chỉ chi tiết.",
+                      },
+                      {
+                        validator: (_, value) => {
+                          const text = trimText(value);
+                          if (!text) {
+                            return Promise.resolve();
+                          }
+                          if (text.length < 5) {
+                            return Promise.reject(
+                              new Error("Địa chỉ chi tiết phải có ít nhất 5 ký tự."),
+                            );
+                          }
+                          if (!isValidAddressDetail(text)) {
+                            return Promise.reject(
+                              new Error("Địa chỉ chi tiết không hợp lệ."),
+                            );
+                          }
+                          return Promise.resolve();
+                        },
                       },
                     ]}
                   >
@@ -1108,7 +1443,19 @@ const CheckoutPage = () => {
                 Chọn địa chỉ đã lưu
               </Button>
 
-              <Form.Item name="note" label="Ghi chú cho đơn hàng">
+              <Form.Item
+                name="note"
+                label="Ghi chú cho đơn hàng"
+                normalize={(value) => trimText(value)}
+                rules={[
+                  {
+                    validator: (_, value) =>
+                      isValidOptionalNote(value)
+                        ? Promise.resolve()
+                        : Promise.reject(new Error("Ghi chú giao hàng không hợp lệ.")),
+                  },
+                ]}
+              >
                 <Input.TextArea
                   rows={2}
                   placeholder="Ghi chú thêm cho người bán hoặc shipper"
@@ -1255,9 +1602,11 @@ const CheckoutPage = () => {
                   split={false}
                   renderItem={(item: any) => {
                     const price = getCheckoutItemPrice(item);
-                    const variantText = [item.size, item.color, item.material]
-                      .filter(Boolean)
-                      .join(" / ");
+                    const variantText = formatKnownVariantAttributes({
+                      color: item.color,
+                      size: item.size,
+                      material: item.material,
+                    });
 
                     return (
                       <List.Item style={{ padding: "0 0 18px" }}>
@@ -1328,123 +1677,72 @@ const CheckoutPage = () => {
                 <Divider style={{ margin: "4px 0 18px" }} />
 
                 <div style={{ marginBottom: 18 }}>
-                  <Text strong>Mã giảm giá</Text>
+                  <Text strong>{"M\u00e3 gi\u1ea3m gi\u00e1"}</Text>
 
-                  {shouldShowVoucher ? (
-                    <div
-                      style={{
-                        alignItems: "center",
-                        background: "#f0fdf4",
-                        border: "1px solid #bbf7d0",
-                        borderRadius: 14,
-                        display: "flex",
-                        gap: 12,
-                        marginTop: 12,
-                        padding: 12,
-                      }}
-                    >
-                      <div
-                        style={{
-                          alignItems: "center",
-                          background: "#dcfce7",
-                          borderRadius: 10,
-                          color: "#16a34a",
-                          display: "flex",
-                          height: 36,
-                          justifyContent: "center",
-                          width: 36,
-                        }}
-                      >
-                        <TagsOutlined />
-                      </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <Text strong style={{ color: "#166534" }}>
-                          {rawVoucherCode}
-                        </Text>
-                        <div>
-                          <Text type="secondary" style={{ fontSize: 12 }}>
-                            Đã giảm {formatMoney(discount)}
-                          </Text>
-                        </div>
-                      </div>
-                      <Button
-                        type="text"
-                        size="small"
-                        icon={<CloseOutlined />}
-                        onClick={clearAppliedVoucher}
-                      />
+                  <div
+                    style={{
+                      border: shouldShowVoucher
+                        ? "1px solid #bbf7d0"
+                        : "1px dashed #93c5fd",
+                      background: shouldShowVoucher ? "#f0fdf4" : "#eff6ff",
+                      borderRadius: 14,
+                      marginTop: 12,
+                      padding: 12,
+                    }}
+                  >
+                    <Row align="middle" justify="space-between" gutter={[12, 12]}>
+                      <Col flex="auto" style={{ minWidth: 0 }}>
+                        <Space align="start">
+                          <TagsOutlined
+                            style={{
+                              color: shouldShowVoucher ? "#16a34a" : "#1677ff",
+                              fontSize: 20,
+                              marginTop: 2,
+                            }}
+                          />
+                          <Space direction="vertical" size={2}>
+                            <Text strong>
+                              {shouldShowVoucher
+                                ? rawVoucherCode
+                                : hasCompleteShippingInfo
+                                  ? "M\u00e3 gi\u1ea3m gi\u00e1"
+                                  : "Ch\u1ecdn \u0111\u1ecba ch\u1ec9 \u0111\u1ec3 h\u1ec7 th\u1ed1ng g\u1ee3i \u00fd m\u00e3 gi\u1ea3m gi\u00e1 t\u1ed1t nh\u1ea5t"}
+                            </Text>
+                            <Text type="secondary" style={{ fontSize: 12 }}>
+                              {shouldShowVoucher
+                                ? `\u0110\u00e3 gi\u1ea3m ${formatMoney(discount)}`
+                                : "H\u1ec7 th\u1ed1ng t\u1ef1 s\u1eafp x\u1ebfp m\u00e3 c\u00f3 l\u1ee3i nh\u1ea5t cho \u0111\u01a1n h\u00e0ng n\u00e0y"}
+                            </Text>
+                          </Space>
+                        </Space>
+                      </Col>
+                      <Col>
+                        <Space>
+                          {shouldShowVoucher && (
+                            <Button
+                              type="text"
+                              size="small"
+                              icon={<CloseOutlined />}
+                              onClick={clearAppliedVoucher}
+                            />
+                          )}
+                          <Button
+                            type="primary"
+                            onClick={() => setVoucherPickerOpen(true)}
+                            disabled={!isAuthenticated || !hasCompleteShippingInfo}
+                            loading={voucherApplying}
+                          >
+                            {shouldShowVoucher ? "\u0110\u1ed5i m\u00e3" : "Ch\u1ecdn m\u00e3 gi\u1ea3m gi\u00e1"}
+                          </Button>
+                        </Space>
+                      </Col>
+                    </Row>
+                  </div>
+
+                  {voucherError && (
+                    <div style={{ marginTop: 10 }}>
+                      <Text type="danger">{voucherError}</Text>
                     </div>
-                  ) : (
-                    <>
-                      <Space.Compact style={{ width: "100%", marginTop: 12 }}>
-                        <Select
-                          showSearch
-                          allowClear
-                          style={{ width: "100%" }}
-                          placeholder="Chọn hoặc nhập mã giảm giá"
-                          value={voucherCode || undefined}
-                          onSelect={(value) => setVoucherCode(value)}
-                          onSearch={(value) => setVoucherCode(value)}
-                          onInputKeyDown={(event) => {
-                            if (event.key === "Enter") {
-                              event.preventDefault();
-                              event.stopPropagation();
-                              handleApplyVoucher(event);
-                            }
-                          }}
-                          onChange={(value) => {
-                            const nextCode = value || "";
-                            setVoucherCode(nextCode);
-                            if (!nextCode) {
-                              clearAppliedVoucher();
-                              return;
-                            }
-
-                            if (
-                              appliedVoucher &&
-                              nextCode.toLowerCase() !==
-                                appliedVoucher.toLowerCase()
-                            ) {
-                              setAppliedVoucher(null);
-                              setAppliedVoucherInfo(null);
-                              setVoucherError("");
-                            }
-                          }}
-                          filterOption={(input, option) =>
-                            String(option?.label ?? "")
-                              .toLowerCase()
-                              .includes(input.toLowerCase())
-                          }
-                          options={availableVouchers
-                            .map((voucher) => ({
-                              label: buildVoucherLabel(voucher),
-                              value: getVoucherInputValue(voucher),
-                            }))
-                            .filter((option) => option.value)}
-                          notFoundContent={
-                            isAuthenticated
-                              ? "Bạn không có mã giảm giá nào"
-                              : "Đăng nhập để xem mã giảm giá của bạn"
-                          }
-                        />
-
-                        <Button
-                          type="primary"
-                          htmlType="button"
-                          onClick={handleApplyVoucher}
-                          loading={voucherApplying}
-                          disabled={voucherApplying || !voucherCode}
-                        >
-                          Áp dụng
-                        </Button>
-                      </Space.Compact>
-
-                      {voucherError && (
-                        <div style={{ marginTop: 10 }}>
-                          <Text type="danger">{voucherError}</Text>
-                        </div>
-                      )}
-                    </>
                   )}
                 </div>
 
@@ -1485,7 +1783,7 @@ const CheckoutPage = () => {
 
                 {shouldShowVoucher && (
                   <Row justify="space-between" style={{ marginBottom: 12 }}>
-                    <Text type="success">Giảm voucher ({rawVoucherCode})</Text>
+                    <Text type="success">Giảm mã giảm giá ({rawVoucherCode})</Text>
                     <Text strong type="success">
                       - {formatMoney(discount)}
                     </Text>
@@ -1533,6 +1831,19 @@ const CheckoutPage = () => {
           </Col>
         </Row>
       </Form>
+
+      <VoucherSelectorModal
+        open={voucherPickerOpen}
+        onClose={() => setVoucherPickerOpen(false)}
+        subtotal={subtotalBeforeVoucher}
+        shippingFee={shippingFee}
+        finalTotal={total}
+        vouchers={voucherOptions}
+        selectedVoucherCode={appliedVoucher}
+        loading={voucherApplying || quoteLoading}
+        onApply={(voucher) => applyVoucherFromOption(voucher, true)}
+        onRemove={appliedVoucher ? clearAppliedVoucher : undefined}
+      />
 
       <Modal
         title="Chọn địa chỉ giao hàng"

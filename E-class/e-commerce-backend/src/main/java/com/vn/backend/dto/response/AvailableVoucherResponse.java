@@ -19,11 +19,15 @@ public class AvailableVoucherResponse {
     private Integer issuedQuantity;
     private Long usedCount;
     private Integer remainingCount;
+    private Integer remainingUses;
     private Double usedPercent;
     private Double remainingPercent;
 
     private BigDecimal estimatedDiscountAmount;
+    private Boolean eligible;
+    private String ineligibleReason;
     private Boolean bestVoucher;
+    private Boolean isBest;
 
     private OffsetDateTime startDate;
     private OffsetDateTime endDate;

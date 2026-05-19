@@ -32,7 +32,7 @@ public class ShipmentServiceImpl implements ShipmentService {
     @Override
     public ShipmentResponse getById(Long id) {
         Shipment shipment = shipmentRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Shipment not found with id: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy vận đơn với ID: " + id));
         return mapToResponse(shipment);
     }
 
@@ -40,9 +40,9 @@ public class ShipmentServiceImpl implements ShipmentService {
     @Transactional
     public ShipmentResponse create(ShipmentRequest request) {
         Order order = orderRepository.findById(request.getOrderId())
-                .orElseThrow(() -> new ResourceNotFoundException("Order not found with id: " + request.getOrderId()));
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy đơn hàng với ID: " + request.getOrderId()));
         ShippingProvider shippingProvider = shippingProviderRepository.findById(request.getShippingProviderId())
-                .orElseThrow(() -> new ResourceNotFoundException("ShippingProvider not found with id: " + request.getShippingProviderId()));
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy đơn vị vận chuyển với ID: " + request.getShippingProviderId()));
 
         Shipment shipment = Shipment.builder()
                 .order(order)
@@ -60,7 +60,7 @@ public class ShipmentServiceImpl implements ShipmentService {
     @Transactional
     public ShipmentResponse update(Long id, ShipmentRequest request) {
         Shipment shipment = shipmentRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Shipment not found with id: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy vận đơn với ID: " + id));
 
         shipment.setTrackingCode(request.getTrackingCode());
         shipment.setShippingFee(request.getShippingFee());

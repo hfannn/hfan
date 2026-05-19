@@ -61,7 +61,7 @@ public class CheckoutQuoteServiceImpl implements CheckoutQuoteService {
             Map<Long, ProductVariant> variantOverrides
     ) {
         if (items == null || items.isEmpty()) {
-            throw new InvalidRequestException("Don hang phai co it nhat mot san pham.");
+            throw new InvalidRequestException("Đơn hàng phải có ít nhất một sản phẩm.");
         }
 
         Map<Long, ProductVariant> variantMap = resolveVariants(items, variantOverrides);
@@ -173,7 +173,7 @@ public class CheckoutQuoteServiceImpl implements CheckoutQuoteService {
 
         for (Long variantId : variantIds) {
             if (!variantMap.containsKey(variantId)) {
-                throw new ResourceNotFoundException("Product variant not found with id: " + variantId);
+                throw new ResourceNotFoundException("Không tìm thấy biến thể sản phẩm với ID: " + variantId);
             }
         }
 

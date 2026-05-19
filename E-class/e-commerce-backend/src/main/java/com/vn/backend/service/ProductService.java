@@ -29,10 +29,14 @@ public interface ProductService {
             Long brandId,
             String sizeValue,
             String color,
+            String material,
             BigDecimal minPrice,
             BigDecimal maxPrice,
             String sort,
-            Boolean isSale
+            Boolean isSale,
+            Long campaignId,
+            BigDecimal discountMin,
+            BigDecimal discountMax
     );
 
     ProductDetailResponse getProductDetail(Long id, boolean includeInactive);

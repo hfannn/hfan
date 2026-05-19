@@ -9,6 +9,8 @@ import java.time.OffsetDateTime;
 public class CouponResponse {
     private Long id;
     private String code;
+    private String name;
+    private String voucherType;
     private String discountType;
     private BigDecimal discountValue;
     private BigDecimal minOrderValue;
@@ -28,6 +30,7 @@ public class CouponResponse {
     // Số lượng còn lại
     private Integer remainingCount;
     private Integer remainingUsage;
+    private Integer remainingUses;
 
     // % đã dùng
     private Double usedPercent;

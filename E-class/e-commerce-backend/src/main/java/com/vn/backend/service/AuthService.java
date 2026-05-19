@@ -30,7 +30,7 @@ public class AuthService {
 
     public LoginResponse login(LoginRequest request) {
         User user = userRepository.findByUsername(request.getUsername())
-                .orElseThrow(() -> new RuntimeException("Username not found"));
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy tài khoản."));
 
         if (Boolean.FALSE.equals(user.getIsActive())) {
             throw new RuntimeException("Account is disabled");

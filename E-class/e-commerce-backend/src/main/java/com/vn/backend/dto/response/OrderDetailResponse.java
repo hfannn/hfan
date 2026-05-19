@@ -44,4 +44,8 @@ public class OrderDetailResponse {
     private String employeeName; 
     private List<OrderItemResponse> items;
     private List<OrderStatusHistoryResponse> statusHistory;
+    private Boolean inventoryReserved;
+    private OffsetDateTime inventoryReservedAt;
+    private Boolean inventoryReleased;
+    private OffsetDateTime inventoryReleasedAt;
 }

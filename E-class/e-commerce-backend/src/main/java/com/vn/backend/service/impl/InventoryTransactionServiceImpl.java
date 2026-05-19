@@ -32,7 +32,7 @@ public class InventoryTransactionServiceImpl implements InventoryTransactionServ
     @Override
     public InventoryTransactionResponse getTransactionById(Long id) {
         InventoryTransaction transaction = transactionRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Transaction not found with id: " + id));
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy giao dịch kho với ID: " + id));
         return mapToResponse(transaction);
     }
 
@@ -43,13 +43,13 @@ public class InventoryTransactionServiceImpl implements InventoryTransactionServ
 
         // Set product variant
         ProductVariant variant = productVariantRepository.findById(request.getProductVariantId())
-                .orElseThrow(() -> new RuntimeException("Product variant not found"));
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy biến thể sản phẩm."));
         transaction.setProductVariant(variant);
 
         // Set store if provided
         if (request.getStoreId() != null) {
             Store store = storeRepository.findById(request.getStoreId())
-                    .orElseThrow(() -> new RuntimeException("Store not found"));
+                    .orElseThrow(() -> new RuntimeException("Không tìm thấy cửa hàng."));
             transaction.setStore(store);
         }
 

@@ -1,147 +1,118 @@
-import { useEffect, useState } from "react";
-import { Button, Carousel, Col, Empty, Row, Space, Spin, Typography, message } from "antd";
+import { Col, Row, Space, Spin, Typography, message } from "antd";
 import {
-  ArrowRightOutlined,
   CreditCardOutlined,
   SafetyCertificateOutlined,
-  SyncOutlined,
+  ShoppingCartOutlined,
 } from "@ant-design/icons";
-import { Link } from "react-router-dom";
-import ProductListDisplay from "@/features/product/Products";
+import { useEffect, useState } from "react";
 import { productService } from "@/services/product.service";
-import {
-  PageResponse,
-  ProductList as ProductItem,
-} from "@/features/product/product.model";
+import { HomeProduct, HomeResponse } from "@/features/product/product.model";
+import ProductSection from "@/features/product/components/ProductSection";
+import { HomeHeroBanner } from "@/features/product/components/HeroBanners";
 
 const { Text, Title } = Typography;
 
-const slides = [
+const benefits = [
   {
-    image:
-      "https://images.unsplash.com/photo-1542291026-7eec264c27ff?q=80&w=2070&auto=format&fit=crop",
-    title: "Giày chính hãng cho mọi chuyển động",
-    description: "Khám phá các mẫu sneaker, running và lifestyle mới nhất.",
+    icon: <SafetyCertificateOutlined />,
+    title: "Chính hãng",
+    desc: "Cam kết 100% sản phẩm chính hãng",
   },
   {
-    image:
-      "https://images.unsplash.com/photo-1511746315387-c4a76990fdce?q=80&w=2070&auto=format&fit=crop",
-    title: "Dễ chọn size, rõ giá, giao nhanh",
-    description: "Trải nghiệm mua sắm gọn gàng từ xem sản phẩm đến thanh toán.",
+    icon: <ShoppingCartOutlined />,
+    title: "Mua sắm dễ dàng",
+    desc: "Đặt hàng nhanh chóng, giao tận nơi",
   },
   {
-    image:
-      "https://images.unsplash.com/photo-1606107557195-0e29a4b5b4aa?q=80&w=1964&auto=format&fit=crop",
-    title: "Bộ sưu tập nổi bật",
-    description: "Những thiết kế được khách hàng quan tâm nhiều nhất.",
+    icon: <CreditCardOutlined />,
+    title: "Thanh toán linh hoạt",
+    desc: "Nhiều phương thức thanh toán an toàn",
   },
 ];
 
+const emptyHome: HomeResponse = {
+  featuredProducts: [],
+  promotionProducts: [],
+  bestSellerProducts: [],
+};
+
+const removeDuplicated = (home: HomeResponse): HomeResponse => {
+  const used = new Set<number>();
+  const unique = (items: HomeProduct[]) =>
+    items.filter((item) => {
+      if (!item.productId || used.has(item.productId)) {
+        return false;
+      }
+      used.add(item.productId);
+      return true;
+    });
+
+  return {
+    promotionProducts: unique(home.promotionProducts || []).slice(0, 4),
+    featuredProducts: unique(home.featuredProducts || []).slice(0, 4),
+    bestSellerProducts: unique(home.bestSellerProducts || []).slice(0, 4),
+  };
+};
+
 const Home = () => {
-  const [products, setProducts] = useState<PageResponse<ProductItem>>();
+  const [homeData, setHomeData] = useState<HomeResponse>(emptyHome);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchInitialProducts = async () => {
+    const fetchHome = async () => {
       setLoading(true);
       try {
-        const res = await productService.filterProducts({ page: 0, size: 8 });
-        setProducts(res.data);
-      } catch (error) {
-        message.error("Không thể tải danh sách sản phẩm cho trang chủ.");
+        const res = await productService.getHome(4);
+        setHomeData(removeDuplicated(res.data || emptyHome));
+      } catch {
+        message.error("Không thể tải dữ liệu trang chủ.");
       } finally {
         setLoading(false);
       }
     };
 
-    fetchInitialProducts();
+    fetchHome();
   }, []);
 
   return (
-    <Space direction="vertical" size={28} style={{ width: "100%" }}>
-      <Carousel autoplay dots className="shop-hero">
-        {slides.map((slide) => (
-          <div key={slide.title}>
-            <div
-              style={{
-                alignItems: "center",
-                background: `linear-gradient(90deg, rgba(8, 18, 38, 0.78), rgba(8, 18, 38, 0.2)), url(${slide.image}) center/cover`,
-                borderRadius: 10,
-                display: "flex",
-                minHeight: 280,
-                overflow: "hidden",
-                padding: "48px clamp(24px, 6vw, 72px)",
-              }}
-            >
-              <Space direction="vertical" size={18} style={{ maxWidth: 560 }}>
-                <Title
-                  level={1}
-                  style={{
-                    color: "#fff",
-                    fontSize: "clamp(34px, 4vw, 52px)",
-                    lineHeight: 1.05,
-                    margin: 0,
-                  }}
-                >
-                  {slide.title}
-                </Title>
-                <Text style={{ color: "rgba(255,255,255,0.82)", fontSize: 18 }}>
-                  {slide.description}
-                </Text>
-                <Link to="/products">
-                  <Button type="primary" size="large" icon={<ArrowRightOutlined />}>
-                    Xem sản phẩm
-                  </Button>
-                </Link>
-              </Space>
-            </div>
-          </div>
-        ))}
-      </Carousel>
+    <Spin spinning={loading}>
+      <Space direction="vertical" size={20} style={{ width: "100%" }}>
+        <HomeHeroBanner />
 
-      <Row gutter={[16, 16]}>
-        {[
-          ["Chính hãng", "Nguồn gốc sản phẩm rõ ràng"],
-          ["Mua sắm dễ dàng", "Hỗ trợ đặt hàng nhanh chóng"],
-          ["Thanh toán linh hoạt", "Tiền mặt, chuyển khoản và VNPay"],
-        ].map(([title, desc]) => (
-          <Col xs={24} md={8} key={title}>
-            <div className="app-section" style={{ padding: 20, height: "100%" }}>
-              <Title level={5} style={{ marginTop: 0 }}>
-                {title}
-              </Title>
-              <Text type="secondary">{desc}</Text>
-            </div>
-          </Col>
-        ))}
-      </Row>
+        <Row gutter={[16, 16]}>
+          {benefits.map((item) => (
+            <Col xs={24} md={8} key={item.title}>
+              <div className="shop-benefit-card">
+                <span className="shop-benefit-icon">{item.icon}</span>
+                <span>
+                  <Title level={5}>{item.title}</Title>
+                  <Text type="secondary">{item.desc}</Text>
+                </span>
+              </div>
+            </Col>
+          ))}
+        </Row>
 
-      <div className="app-section" style={{ padding: 24 }}>
-        <Space
-          align="center"
-          style={{ justifyContent: "space-between", width: "100%", marginBottom: 20 }}
-          wrap
-        >
-          <div>
-            <Title level={2} style={{ margin: 0 }}>
-              Sản phẩm nổi bật
-            </Title>
-            <Text type="secondary"></Text>
-          </div>
-          <Link to="/products">
-            <Button>Xem tất cả</Button>
-          </Link>
-        </Space>
-
-        <Spin spinning={loading}>
-          {products && products.content.length > 0 ? (
-            <ProductListDisplay products={products.content} hideTitle />
-          ) : (
-            !loading && <Empty description="Hiện chưa có sản phẩm nào." />
-          )}
-        </Spin>
-      </div>
-    </Space>
+        <ProductSection
+          title="Sản phẩm nổi bật"
+          products={homeData.featuredProducts}
+          mode="normal"
+          viewAllTo="/products"
+        />
+        <ProductSection
+          title="Khuyến mãi nổi bật"
+          products={homeData.promotionProducts}
+          mode="sale"
+          viewAllTo="/promotions"
+        />
+        <ProductSection
+          title="Sản phẩm bán chạy"
+          products={homeData.bestSellerProducts}
+          mode="bestSeller"
+          viewAllTo="/products"
+        />
+      </Space>
+    </Spin>
   );
 };
 

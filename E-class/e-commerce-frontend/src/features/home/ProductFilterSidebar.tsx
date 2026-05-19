@@ -16,8 +16,8 @@ const ProductFilterSidebar = () => {
 
         await new Promise(resolve => setTimeout(resolve, 1000)); 
         const mockData = {
-          brands: ['Nike', 'Adidas', 'Jordan', 'Yeezy', 'Other Brands'],
-          colors: ['Black', 'White', 'Red', 'Blue', 'Green', 'Yellow', 'Orange'],
+          brands: ['Nike', 'Adidas', 'Jordan', 'Yeezy', 'Thương hiệu khác'],
+          colors: ['Đen', 'Trắng', 'Đỏ', 'Xanh dương', 'Xanh lá', 'Vàng', 'Cam'],
           sizes: ['38', '39', '40', '41', '42', '43', '44', '45'],
         };
         setBrands(mockData.brands);

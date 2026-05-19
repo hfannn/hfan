@@ -21,12 +21,32 @@ export interface ProductVariantUpdatePayload {
 }
 
 export const productService = {
+  getHome: (limit = 4) => {
+    return axiosClient.get("/v1/home", { params: { limit } });
+  },
+
+  getHomeFeaturedProducts: (limit = 4) => {
+    return axiosClient.get("/v1/home/featured-products", { params: { limit } });
+  },
+
+  getHomePromotionProducts: (limit = 4) => {
+    return axiosClient.get("/v1/home/promotion-products", { params: { limit } });
+  },
+
+  getHomeBestSellers: (limit = 4) => {
+    return axiosClient.get("/v1/home/best-sellers", { params: { limit } });
+  },
+
   getProducts: (params?: any) => {
     return axiosClient.get("/v1/products", { params });
   },
 
   filterProducts: (params?: any) => {
     return axiosClient.get("/v1/products/filter", { params });
+  },
+
+  getPromotionProducts: (params?: any) => {
+    return axiosClient.get("/v1/products/promotions", { params });
   },
 
   getProductById: (productId: number, includeInactive = false) => {
