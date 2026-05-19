@@ -11,7 +11,6 @@ import com.vn.backend.entity.OrderItem;
 import com.vn.backend.entity.OrderStatusHistory;
 import com.vn.backend.entity.Payment;
 import com.vn.backend.entity.PaymentMethod;
-import com.vn.backend.entity.Promotion;
 import com.vn.backend.repository.CouponRepository;
 import com.vn.backend.repository.CouponUsageRepository;
 import com.vn.backend.repository.OrderItemRepository;
@@ -19,7 +18,6 @@ import com.vn.backend.repository.OrderRepository;
 import com.vn.backend.repository.OrderStatusHistoryRepository;
 import com.vn.backend.repository.PaymentMethodRepository;
 import com.vn.backend.repository.PaymentRepository;
-import com.vn.backend.repository.PromotionRepository;
 import com.vn.backend.util.VnpayUtil;
 import jakarta.persistence.EntityNotFoundException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -73,7 +71,6 @@ public class VnpayServiceImpl implements com.vn.backend.service.VnpayService {
     private final OrderItemRepository orderItemRepository;
     private final PaymentRepository paymentRepository;
     private final PaymentMethodRepository paymentMethodRepository;
-    private final PromotionRepository promotionRepository;
     private final CouponRepository couponRepository;
     private final CouponUsageRepository couponUsageRepository;
     private final OrderStatusHistoryRepository orderStatusHistoryRepository;
@@ -128,7 +125,7 @@ public class VnpayServiceImpl implements com.vn.backend.service.VnpayService {
         );
         vnpParams.put("vnp_CurrCode", "VND");
         vnpParams.put("vnp_TxnRef", txnRef);
-        vnpParams.put("vnp_OrderInfo", "Thanh toan hoa don POS " + order.getCode());
+        vnpParams.put("vnp_OrderInfo", "Thanh toán hóa đơn POS " + order.getCode());
         vnpParams.put("vnp_OrderType", "other");
         vnpParams.put("vnp_Locale", "vn");
         vnpParams.put("vnp_ReturnUrl", vnpayConfig.getPosReturnUrl());
@@ -296,8 +293,8 @@ public class VnpayServiceImpl implements com.vn.backend.service.VnpayService {
         boolean hasCoupon = request.getCouponId() != null;
         boolean hasPromotion = request.getPromotionId() != null;
 
-        if (hasCoupon && hasPromotion) {
-            throw new IllegalArgumentException("Chỉ được áp dụng một voucher cho mỗi hóa đơn");
+        if (hasPromotion) {
+            throw new IllegalArgumentException("Khuyến mãi sản phẩm không được áp dụng như mã giảm giá đơn hàng");
         }
 
         if (hasCoupon) {
@@ -316,28 +313,10 @@ public class VnpayServiceImpl implements com.vn.backend.service.VnpayService {
                     totalAmount,
                     coupon.getDiscountType(),
                     coupon.getDiscountValue(),
-                    null
+                    coupon.getMaxDiscountAmount()
             );
             appliedVoucherCode = coupon.getCode();
             appliedVoucherType = "COUPON";
-        }
-
-        if (hasPromotion) {
-            Promotion promotion = promotionRepository.findById(request.getPromotionId())
-                    .orElseThrow(() -> new EntityNotFoundException("Không tìm thấy chương trình khuyến mãi"));
-
-            if (!isPromotionApplicable(promotion, order, totalAmount)) {
-                throw new IllegalArgumentException("Khuyến mãi không còn hợp lệ hoặc không đủ điều kiện áp dụng");
-            }
-
-            discountAmount = calculateDiscountAmount(
-                    totalAmount,
-                    promotion.getDiscountType(),
-                    promotion.getDiscountValue(),
-                    promotion.getMaxDiscountAmount()
-            );
-            appliedVoucherCode = promotion.getCode();
-            appliedVoucherType = "PROMOTION";
         }
 
         if (discountAmount.compareTo(totalAmount) > 0) {
@@ -401,7 +380,7 @@ public class VnpayServiceImpl implements com.vn.backend.service.VnpayService {
         );
         vnpParams.put("vnp_CurrCode", "VND");
         vnpParams.put("vnp_TxnRef", txnRef);
-        vnpParams.put("vnp_OrderInfo", "Thanh toan don hang online " + order.getCode());
+        vnpParams.put("vnp_OrderInfo", "Thanh toán đơn hàng online " + order.getCode());
         vnpParams.put("vnp_OrderType", "other");
         vnpParams.put("vnp_Locale", "vn");
         vnpParams.put("vnp_ReturnUrl", vnpayConfig.getOnlineReturnUrl());
@@ -604,7 +583,16 @@ public class VnpayServiceImpl implements com.vn.backend.service.VnpayService {
     }
 
     private boolean isCouponApplicable(Coupon coupon, Order order, BigDecimal subtotal) {
-        if (coupon == null || Boolean.FALSE.equals(coupon.getIsActive())) {
+        if (coupon == null || !Boolean.TRUE.equals(coupon.getIsActive())) {
+            return false;
+        }
+
+        OffsetDateTime now = OffsetDateTime.now();
+        if (coupon.getStartDate() != null && now.isBefore(coupon.getStartDate())) {
+            return false;
+        }
+
+        if (coupon.getEndDate() != null && now.isAfter(coupon.getEndDate())) {
             return false;
         }
 
@@ -619,54 +607,16 @@ public class VnpayServiceImpl implements com.vn.backend.service.VnpayService {
             return false;
         }
 
+        if (coupon.getMinOrderValue() != null && subtotal.compareTo(coupon.getMinOrderValue()) < 0) {
+            return false;
+        }
+
         return couponUsageRepository.countByCoupon_IdAndCustomer_Id(
                 coupon.getId(),
                 order.getCustomer().getId()
         ) == 0;
     }
 
-    private boolean isPromotionApplicable(Promotion promotion, Order order, BigDecimal subtotal) {
-        if (promotion == null || Boolean.FALSE.equals(promotion.getIsActive())) {
-            return false;
-        }
-
-        OffsetDateTime now = OffsetDateTime.now();
-
-        if (promotion.getStartDate() != null && promotion.getStartDate().isAfter(now)) {
-            return false;
-        }
-
-        if (promotion.getEndDate() != null && promotion.getEndDate().isBefore(now)) {
-            return false;
-        }
-
-        if (promotion.getMinOrderValue() != null
-                && subtotal.compareTo(promotion.getMinOrderValue()) < 0) {
-            return false;
-        }
-
-        if (promotion.getUsageLimit() != null && promotion.getUsageLimit() > 0) {
-            long usedCount = couponUsageRepository.countByPromotion_Id(promotion.getId());
-            if (usedCount >= promotion.getUsageLimit()) {
-                return false;
-            }
-        }
-
-        if (promotion.getUsageLimitPerCustomer() != null
-                && promotion.getUsageLimitPerCustomer() > 0
-                && order.getCustomer() != null) {
-            long customerUsedCount = couponUsageRepository.countByPromotion_IdAndCustomer_Id(
-                    promotion.getId(),
-                    order.getCustomer().getId()
-            );
-
-            if (customerUsedCount >= promotion.getUsageLimitPerCustomer()) {
-                return false;
-            }
-        }
-
-        return true;
-    }
 
     private BigDecimal calculateDiscountAmount(
             BigDecimal subtotal,
@@ -778,18 +728,6 @@ public class VnpayServiceImpl implements com.vn.backend.service.VnpayService {
         }
 
         couponUsageRepository.deleteByOrder_Id(order.getId());
-
-        Promotion promotion = promotionRepository.findByCode(order.getVoucherCode()).orElse(null);
-        if (promotion != null) {
-            couponUsageRepository.save(
-                    CouponUsage.builder()
-                            .promotion(promotion)
-                            .customer(order.getCustomer())
-                            .order(order)
-                            .build()
-            );
-            return;
-        }
 
         Coupon coupon = couponRepository.findByCodeAndIsActiveTrue(order.getVoucherCode())
                 .orElse(null);

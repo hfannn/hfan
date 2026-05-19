@@ -4,7 +4,11 @@ export interface CouponRequest {
   code: string;
   discountType: 'PERCENTAGE' | 'FIXED_AMOUNT';
   discountValue: number;
+  minOrderValue?: number;
+  maxDiscountAmount?: number;
   usageLimit: number;
+  startDate?: string;
+  endDate?: string;
   isActive?: boolean;
 }
 

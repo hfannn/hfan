@@ -28,7 +28,6 @@ import com.vn.backend.entity.Payment;
 import com.vn.backend.entity.PaymentMethod;
 import com.vn.backend.entity.ProductImage;
 import com.vn.backend.entity.ProductVariant;
-import com.vn.backend.entity.Promotion;
 import com.vn.backend.entity.User;
 import com.vn.backend.entity.UserProfile;
 import com.vn.backend.exception.InvalidRequestException;
@@ -44,7 +43,6 @@ import com.vn.backend.repository.OrderStatusHistoryRepository;
 import com.vn.backend.repository.PaymentMethodRepository;
 import com.vn.backend.repository.PaymentRepository;
 import com.vn.backend.repository.ProductVariantRepository;
-import com.vn.backend.repository.PromotionRepository;
 import com.vn.backend.repository.ReviewRepository;
 import com.vn.backend.repository.UserRepository;
 import com.vn.backend.security.CustomUserDetails;
@@ -91,7 +89,6 @@ public class OrderServiceImpl implements OrderService {
     private final PaymentMethodRepository paymentMethodRepository;
     private final PaymentRepository paymentRepository;
     private final CouponUsageRepository couponUsageRepository;
-    private final PromotionRepository promotionRepository;
     private final EmployeeRepository employeeRepository;
     private final GhtkService ghtkService;
     private final GHTKLogicHandler ghtkLogicHandler;
@@ -184,7 +181,7 @@ public class OrderServiceImpl implements OrderService {
         if (StringUtils.hasText(request.getVoucherCode()) && Boolean.FALSE.equals(quote.getVoucherValid())) {
             throw new InvalidRequestException(defaultText(
                     quote.getVoucherMessage(),
-                    "Voucher khong con hop le."
+                    "Voucher không còn hợp lệ."
             ));
         }
 
@@ -218,17 +215,10 @@ public class OrderServiceImpl implements OrderService {
         BigDecimal shippingFee = defaultZero(quote.getShippingFee());
         BigDecimal productRevenue = defaultZero(quote.getProductRevenue());
         BigDecimal totalAmount = defaultZero(quote.getFinalTotal());
-        Promotion appliedPromotion = null;
-        Coupon appliedCoupon = null;
-
-        if (StringUtils.hasText(request.getVoucherCode())) {
-            Optional<Promotion> promotionOpt = promotionRepository.findByCode(request.getVoucherCode());
-            if (promotionOpt.isPresent()) {
-                appliedPromotion = promotionOpt.get();
-            } else {
-                appliedCoupon = discountService.findCouponByCode(request.getVoucherCode());
-            }
-        }
+        String appliedVoucherCode = quote.getVoucherCode();
+        Coupon appliedCoupon = StringUtils.hasText(appliedVoucherCode)
+                ? discountService.findCouponByCode(appliedVoucherCode)
+                : null;
 
         Employee employee = null;
         if (request.getEmployeeId() != null) {
@@ -248,7 +238,7 @@ public class OrderServiceImpl implements OrderService {
                 .productRevenue(productRevenue)
                 .totalAmount(totalAmount)
                 .shippingFee(shippingFee)
-                .voucherCode(request.getVoucherCode())
+                .voucherCode(appliedVoucherCode)
                 .build();
 
         OrderShippingDetails shippingDetails = new OrderShippingDetails();
@@ -281,11 +271,10 @@ public class OrderServiceImpl implements OrderService {
 
         boolean isVnpayPayment = "VNPAY".equalsIgnoreCase(paymentMethod.getCode());
 
-        if (!isVnpayPayment && (appliedPromotion != null || appliedCoupon != null)) {
+        if (!isVnpayPayment && appliedCoupon != null) {
             CouponUsage usage = CouponUsage.builder()
                     .order(savedOrder)
                     .customer(customer)
-                    .promotion(appliedPromotion)
                     .coupon(appliedCoupon)
                     .build();
             couponUsageRepository.save(usage);
@@ -312,7 +301,7 @@ public class OrderServiceImpl implements OrderService {
     }
 
     @Override
-    @Transactional(readOnly = true)
+    @Transactional
     public OrderDetailResponse getOrderDetailsById(Long orderId, Long userId) {
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy đơn hàng với ID: " + orderId));
@@ -360,10 +349,15 @@ public class OrderServiceImpl implements OrderService {
                 ? order.getEmployee().getUserProfile().getFullName()
                 : null;
 
-        String paymentMethodName = paymentRepository.findByOrder_Id(order.getId()).stream()
-                .findFirst()
-                .map(payment -> payment.getPaymentMethod().getName())
-                .orElse("Chưa xác định");
+        ensureCompletedOrderPaymentPaid(order);
+        Payment latestPayment = getLatestPayment(order);
+        String paymentStatus = latestPayment != null ? latestPayment.getStatus() : null;
+        String paymentMethodCode = latestPayment != null && latestPayment.getPaymentMethod() != null
+                ? latestPayment.getPaymentMethod().getCode()
+                : null;
+        String paymentMethodName = latestPayment != null && latestPayment.getPaymentMethod() != null
+                ? latestPayment.getPaymentMethod().getName()
+                : "Chưa xác định";
 
         BigDecimal subtotalAmount = resolveSubtotalBeforeVoucher(order);
         BigDecimal originalSubtotal = resolveOriginalSubtotal(order);
@@ -391,6 +385,8 @@ public class OrderServiceImpl implements OrderService {
                 district,
                 ward,
                 paymentMethodName,
+                paymentStatus,
+                paymentMethodCode,
                 subtotalAmount,
                 originalSubtotal,
                 productDiscountTotal,
@@ -491,7 +487,7 @@ public class OrderServiceImpl implements OrderService {
     }
 
     @Override
-    @Transactional(readOnly = true)
+    @Transactional
     public Page<OrderResponse> getMyOrders(Long userId, Pageable pageable) {
         Customer customer = resolveCustomer(userId);
         return orderRepository.findByCustomer_IdOrderByCreatedAtDesc(customer.getId(), pageable)
@@ -499,7 +495,7 @@ public class OrderServiceImpl implements OrderService {
     }
 
     @Override
-    @Transactional(readOnly = true)
+    @Transactional
     public Page<OrderResponse> getAllOrders(Pageable pageable) {
         Pageable sortedPageable = PageRequest.of(
                 pageable.getPageNumber(),
@@ -538,6 +534,10 @@ public class OrderServiceImpl implements OrderService {
         }
 
         order.setStatus(normalizedStatus);
+        if (ORDER_STATUS_COMPLETED.equals(normalizedStatus)) {
+            markLatestPaymentAsPaidIfNeeded(order);
+        }
+
         Order updatedOrder = orderRepository.save(order);
 
         saveOrderStatusHistory(updatedOrder, previousStatus, normalizedStatus);
@@ -779,10 +779,8 @@ public class OrderServiceImpl implements OrderService {
         BigDecimal discountPercent = calculateDiscountPercent(subtotalAmount, discountAmount);
         BigDecimal finalTotal = resolveFinalTotal(order, subtotalAmount, discountAmount);
 
-        Payment latestPayment = paymentRepository.findByOrder_Id(order.getId())
-                .stream()
-                .max(Comparator.comparing(Payment::getId))
-                .orElse(null);
+        ensureCompletedOrderPaymentPaid(order);
+        Payment latestPayment = getLatestPayment(order);
 
         String paymentStatus = latestPayment != null ? latestPayment.getStatus() : null;
         String paymentMethodCode = latestPayment != null && latestPayment.getPaymentMethod() != null
@@ -1012,10 +1010,8 @@ public class OrderServiceImpl implements OrderService {
     }
 
     private void markPaymentRefundPending(Order order, String adminNote) {
-        Payment latestPayment = paymentRepository.findByOrder_Id(order.getId())
-                .stream()
-                .max(Comparator.comparing(Payment::getId))
-                .orElse(null);
+        ensureCompletedOrderPaymentPaid(order);
+        Payment latestPayment = getLatestPayment(order);
 
         if (latestPayment == null) {
             return;
@@ -1032,6 +1028,44 @@ public class OrderServiceImpl implements OrderService {
                 defaultText(adminNote, "Chờ hoàn tiền do admin duyệt trả hàng")
         ));
         paymentRepository.save(latestPayment);
+    }
+
+    private void markLatestPaymentAsPaidIfNeeded(Order order) {
+        Payment latestPayment = getLatestPayment(order);
+
+        if (latestPayment == null) {
+            return;
+        }
+
+        if (PAYMENT_STATUS_PAID.equalsIgnoreCase(latestPayment.getStatus())) {
+            return;
+        }
+
+        latestPayment.setStatus(PAYMENT_STATUS_PAID);
+        if (latestPayment.getPaidAt() == null) {
+            latestPayment.setPaidAt(OffsetDateTime.now());
+        }
+        order.setCustomerPaid(defaultZero(latestPayment.getAmount()));
+        paymentRepository.save(latestPayment);
+    }
+
+    private void ensureCompletedOrderPaymentPaid(Order order) {
+        if (order == null || !ORDER_STATUS_COMPLETED.equalsIgnoreCase(order.getStatus())) {
+            return;
+        }
+
+        markLatestPaymentAsPaidIfNeeded(order);
+    }
+
+    private Payment getLatestPayment(Order order) {
+        if (order == null || order.getId() == null) {
+            return null;
+        }
+
+        return paymentRepository.findByOrder_Id(order.getId())
+                .stream()
+                .max(Comparator.comparing(Payment::getId))
+                .orElse(null);
     }
 
     private String appendAuditNote(String currentNote, String tag, String message) {

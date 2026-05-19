@@ -238,7 +238,7 @@ public class CartServiceImpl implements CartService {
         BigDecimal totalAmount = BigDecimal.ZERO;
         int totalItems = 0;
 
-        List<CartItem> items = cartItemRepository.findByCartId(cart.getId());
+        List<CartItem> items = cartItemRepository.findByCartIdOrderByIdAsc(cart.getId());
 
         for (CartItem item : items) {
             ProductVariant variant = item.getProductVariant();

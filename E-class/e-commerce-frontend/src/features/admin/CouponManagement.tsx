@@ -1,5 +1,6 @@
 import { PlusOutlined, EditOutlined, DeleteOutlined } from "@ant-design/icons";
 import { Button, message, Popconfirm, Tooltip } from "antd";
+import type { FormInstance, RuleObject } from "antd/es/form";
 import { useState, useRef } from "react";
 import type { ProColumns, ActionType } from "@ant-design/pro-table";
 import ProTable from "@ant-design/pro-table";
@@ -9,7 +10,9 @@ import {
   ProFormSelect,
   ProFormDigit,
   ProFormSwitch,
+  ProFormDateTimePicker,
 } from "@ant-design/pro-form";
+import dayjs from "dayjs";
 import { couponService, CouponRequest } from "@/services/coupon.service";
 
 interface Coupon {
@@ -17,14 +20,33 @@ interface Coupon {
   code: string;
   discountType: "PERCENTAGE" | "FIXED_AMOUNT";
   discountValue: number;
+  minOrderValue?: number | null;
+  maxDiscountAmount?: number | null;
   usageLimit: number | null;
   remainingUsage?: number | null;
+  remainingCount?: number | null;
+  startDate?: string | null;
+  endDate?: string | null;
   isActive: boolean;
 }
 
+const formatMoney = (value?: number | string | null) =>
+  `${Number(value || 0).toLocaleString("vi-VN")} ₫`;
+
+const normalizeDateValue = (value: any) => {
+  if (!value) {
+    return undefined;
+  }
+  return typeof value?.toISOString === "function"
+    ? value.toISOString()
+    : new Date(value).toISOString();
+};
+
+type CouponFormRuleFactory = (form: FormInstance) => RuleObject;
+
 const CouponManagementPage = () => {
   const [modalVisible, setModalVisible] = useState<boolean>(false);
-  const [editingCoupon, setEditingCoupon] = useState<Coupon | null>(null);
+  const [editingCoupon, setEditingCoupon] = useState<any>(null);
   const actionRef = useRef<ActionType>(null);
 
   const handleAdd = () => {
@@ -33,7 +55,11 @@ const CouponManagementPage = () => {
   };
 
   const handleEdit = (record: Coupon) => {
-    setEditingCoupon(record);
+    setEditingCoupon({
+      ...record,
+      startDate: record.startDate ? dayjs(record.startDate) : undefined,
+      endDate: record.endDate ? dayjs(record.endDate) : undefined,
+    });
     setModalVisible(true);
   };
 
@@ -47,14 +73,18 @@ const CouponManagementPage = () => {
     }
   };
 
-  const handleSubmit = async (values: CouponRequest) => {
+  const handleSubmit = async (values: any) => {
     try {
       const payload: CouponRequest = {
         ...values,
         code: values.code.trim().toUpperCase(),
+        minOrderValue: Number(values.minOrderValue || 0),
+        maxDiscountAmount: values.maxDiscountAmount ?? undefined,
+        startDate: normalizeDateValue(values.startDate),
+        endDate: normalizeDateValue(values.endDate),
       };
 
-      if (editingCoupon) {
+      if (editingCoupon?.id) {
         await couponService.update(editingCoupon.id, payload);
         message.success("Cập nhật thành công");
       } else {
@@ -73,7 +103,7 @@ const CouponManagementPage = () => {
   };
 
   const columns: ProColumns<Coupon>[] = [
-    { title: "ID", dataIndex: "id", width: 48, search: false },
+    { title: "ID", dataIndex: "id", width: 64, search: false },
     { title: "Mã giảm giá", dataIndex: "code", copyable: true },
     {
       title: "Loại giảm",
@@ -90,18 +120,46 @@ const CouponManagementPage = () => {
       dataIndex: "discountValue",
       search: false,
       align: "right",
-      render: (_, record) => {
-        if (record.discountType === "PERCENTAGE") {
-          return `${record.discountValue}%`;
-        }
-        return `${record.discountValue.toLocaleString("vi-VN")} ₫`;
-      },
+      render: (_, record) =>
+        record.discountType === "PERCENTAGE"
+          ? `${record.discountValue}%`
+          : formatMoney(record.discountValue),
     },
     {
-      title: "Lượt sử dụng",
-      dataIndex: "usageLimit",
+      title: "Đơn tối thiểu",
+      dataIndex: "minOrderValue",
+      search: false,
+      align: "right",
+      render: (_, record) => formatMoney(record.minOrderValue),
+    },
+    {
+      title: "Giảm tối đa",
+      dataIndex: "maxDiscountAmount",
+      search: false,
+      align: "right",
+      render: (_, record) =>
+        record.maxDiscountAmount ? formatMoney(record.maxDiscountAmount) : "-",
+    },
+    {
+      title: "Lượt còn lại",
+      dataIndex: "remainingCount",
       align: "center",
       search: false,
+      render: (_, record) =>
+        record.remainingCount ?? record.remainingUsage ?? record.usageLimit ?? "-",
+    },
+    {
+      title: "Thời gian hiệu lực",
+      search: false,
+      render: (_, record) => {
+        const start = record.startDate
+          ? dayjs(record.startDate).format("DD/MM/YYYY HH:mm")
+          : "Không giới hạn";
+        const end = record.endDate
+          ? dayjs(record.endDate).format("DD/MM/YYYY HH:mm")
+          : "Không giới hạn";
+        return `${start} - ${end}`;
+      },
     },
     {
       title: "Trạng thái",
@@ -151,9 +209,9 @@ const CouponManagementPage = () => {
             ...params,
           });
           return {
-            data: response.data.content,
+            data: response.data.content || [],
             success: true,
-            total: response.data.totalElements,
+            total: response.data.totalElements || 0,
           };
         }}
         rowKey="id"
@@ -172,7 +230,7 @@ const CouponManagementPage = () => {
       />
       <ModalForm
         title={editingCoupon ? "Cập nhật mã giảm giá" : "Thêm mã giảm giá mới"}
-        width="500px"
+        width="620px"
         open={modalVisible}
         onOpenChange={setModalVisible}
         onFinish={handleSubmit}
@@ -181,6 +239,7 @@ const CouponManagementPage = () => {
             isActive: true,
             discountType: "FIXED_AMOUNT",
             usageLimit: 1,
+            minOrderValue: 0,
           }
         }
         modalProps={{
@@ -211,7 +270,46 @@ const CouponManagementPage = () => {
           label="Giá trị giảm"
           min={1}
           fieldProps={{ precision: 0 }}
-          rules={[{ required: true, message: "Vui lòng nhập giá trị giảm" }]}
+          rules={[
+            { required: true, message: "Vui lòng nhập giá trị giảm" },
+            (({ getFieldValue }) => ({
+              validator(_: RuleObject, value: number | undefined) {
+                if (
+                  getFieldValue("discountType") === "PERCENTAGE" &&
+                  Number(value) > 100
+                ) {
+                  return Promise.reject(
+                    new Error("Giảm theo phần trăm không được lớn hơn 100"),
+                  );
+                }
+                return Promise.resolve();
+              },
+            })) as CouponFormRuleFactory,
+          ]}
+        />
+        <ProFormDigit
+          name="minOrderValue"
+          label="Đơn tối thiểu"
+          min={0}
+          fieldProps={{ precision: 0 }}
+        />
+        <ProFormDigit
+          name="maxDiscountAmount"
+          label="Giảm tối đa"
+          min={1}
+          fieldProps={{ precision: 0 }}
+          rules={[
+            (({ getFieldValue }) => ({
+              validator(_: RuleObject, value: number | undefined) {
+                if (getFieldValue("discountType") === "PERCENTAGE" && !value) {
+                  return Promise.reject(
+                    new Error("Coupon phần trăm phải có mức giảm tối đa"),
+                  );
+                }
+                return Promise.resolve();
+              },
+            })) as CouponFormRuleFactory,
+          ]}
         />
         <ProFormDigit
           name="usageLimit"
@@ -222,6 +320,8 @@ const CouponManagementPage = () => {
             { required: true, message: "Vui lòng nhập giới hạn sử dụng" },
           ]}
         />
+        <ProFormDateTimePicker name="startDate" label="Thời gian bắt đầu" />
+        <ProFormDateTimePicker name="endDate" label="Thời gian kết thúc" />
         <ProFormSwitch name="isActive" label="Kích hoạt" />
       </ModalForm>
     </>

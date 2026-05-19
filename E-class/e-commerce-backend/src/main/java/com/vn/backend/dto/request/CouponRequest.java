@@ -5,6 +5,7 @@ import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 
 import java.math.BigDecimal;
+import java.time.OffsetDateTime;
 
 @Data
 public class CouponRequest {
@@ -14,6 +15,10 @@ public class CouponRequest {
     private String discountType;
     @NotNull
     private BigDecimal discountValue;
+    private BigDecimal minOrderValue;
+    private BigDecimal maxDiscountAmount;
     private Integer usageLimit;
+    private OffsetDateTime startDate;
+    private OffsetDateTime endDate;
     private Boolean isActive;
 }

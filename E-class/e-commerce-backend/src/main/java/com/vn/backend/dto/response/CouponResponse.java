@@ -11,8 +11,12 @@ public class CouponResponse {
     private String code;
     private String discountType;
     private BigDecimal discountValue;
+    private BigDecimal minOrderValue;
+    private BigDecimal maxDiscountAmount;
     private Integer usageLimit;
     private Boolean isActive;
+    private OffsetDateTime startDate;
+    private OffsetDateTime endDate;
     private OffsetDateTime createdAt;
 
     // Tổng số lượng phát hành
@@ -23,6 +27,7 @@ public class CouponResponse {
 
     // Số lượng còn lại
     private Integer remainingCount;
+    private Integer remainingUsage;
 
     // % đã dùng
     private Double usedPercent;

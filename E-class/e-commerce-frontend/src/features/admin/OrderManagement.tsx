@@ -24,11 +24,13 @@ import {
   CarOutlined,
   SearchOutlined,
   ReloadOutlined,
+  PrinterOutlined,
 } from "@ant-design/icons";
 import type { ProColumns } from "@ant-design/pro-table";
 import { adminOrderService } from "@/services/admin.order.service";
 import { useLocation, useNavigate } from "react-router-dom";
 import OrderDetailModal from "@/layouts/components/OrderDetailModal";
+import { printThermalInvoice } from "@/utils/invoicePrint";
 import dayjs, { Dayjs } from "dayjs";
 
 const { Title, Text } = Typography;
@@ -36,7 +38,7 @@ const { RangePicker } = DatePicker;
 
 interface Order {
   id: number;
-  code: string;
+  code?: string | null;
   customer?: {
     userProfile?: {
       fullName?: string;
@@ -49,17 +51,22 @@ interface Order {
   district?: string;
   ward?: string;
   fullAddress?: string;
-  totalAmount: number;
+  totalAmount?: number;
+  finalTotal?: number;
   subtotalAmount?: number;
   discountAmount?: number;
-  discountType?: 'PERCENTAGE' | 'FIXED_AMOUNT';
+  discountType?: "PERCENTAGE" | "FIXED_AMOUNT";
   discountValue?: number;
   voucherCode?: string;
   discountPercent?: number;
+  paymentStatus?: string;
+  paymentMethodName?: string;
   status: string;
   createdAt: string;
   orderType?: string | null;
 }
+
+type OrderTypeLabel = "Online" | "Tại quầy";
 
 const OrderManagementPage = () => {
   const [allOrders, setAllOrders] = useState<Order[]>([]);
@@ -73,6 +80,7 @@ const OrderManagementPage = () => {
   const [dateRange, setDateRange] = useState<
     [Dayjs | null, Dayjs | null] | null
   >(null);
+  const [printingOrderId, setPrintingOrderId] = useState<number | null>(null);
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -115,67 +123,78 @@ const OrderManagementPage = () => {
     `${Number(value || 0).toLocaleString("vi-VN")} ₫`;
 
   const normalizeStatus = (status?: string) => {
-    const raw = String(status ?? '').trim().toUpperCase();
+    const raw = String(status ?? "").trim().toUpperCase();
 
-    if (['DRAFT'].includes(raw)) return 'DRAFT';
-    if (['PENDING', 'WAITING_CONFIRM'].includes(raw)) return 'PENDING';
-    if (['CONFIRMED', 'PROCESSING'].includes(raw)) return 'CONFIRMED';
-    if (['SHIPPING', 'DELIVERING'].includes(raw)) return 'SHIPPING';
-    if (['COMPLETED', 'DONE', 'DELIVERED', 'SUCCESS'].includes(raw)) return 'COMPLETED';
-    if (['CANCELLED', 'CANCELED'].includes(raw)) return 'CANCELLED';
+    if (["DRAFT"].includes(raw)) return "DRAFT";
+    if (["PENDING", "WAITING_CONFIRM"].includes(raw)) return "PENDING";
+    if (["CONFIRMED", "PROCESSING"].includes(raw)) return "CONFIRMED";
+    if (["SHIPPING", "DELIVERING"].includes(raw)) return "SHIPPING";
+    if (["COMPLETED", "DONE", "DELIVERED", "SUCCESS"].includes(raw)) return "COMPLETED";
+    if (["CANCELLED", "CANCELED"].includes(raw)) return "CANCELLED";
 
     return raw;
   };
 
-  const normalizeOrderType = (order: Order): 'POS' | 'ONLINE' => {
-    const raw = String(order.orderType ?? '').trim().toUpperCase();
-
-    if (['POS', 'OFFLINE', 'COUNTER', 'AT_COUNTER'].includes(raw)) {
-      return 'POS';
+  const handlePrintInvoice = async (record: Order) => {
+    if (normalizeStatus(record.status) !== "COMPLETED") {
+      return;
     }
 
-    if (['ONLINE', 'DELIVERY', 'WEB', 'ECOMMERCE'].includes(raw)) {
-      return 'ONLINE';
+    try {
+      setPrintingOrderId(record.id);
+      const orderDetailPromise = Array.isArray((record as any).items)
+        ? Promise.resolve(record as any)
+        : adminOrderService.getOrderById(record.id).then((response) => response.data);
+
+      await printThermalInvoice(orderDetailPromise);
+    } catch (error) {
+      message.error("Không thể in hóa đơn. Vui lòng thử lại.");
+    } finally {
+      setPrintingOrderId(null);
     }
-
-    const hasShippingAddress = Boolean(
-      order.fullAddress ||
-      order.address ||
-      order.province ||
-      order.district ||
-      order.ward
-    );
-
-    if (hasShippingAddress) {
-      return 'ONLINE';
-    }
-
-    return 'POS';
   };
 
-  const getDisplayAddress = (order: Order) => {
-    if (normalizeOrderType(order) === 'POS') {
-      return 'Bán tại quầy';
+  const normalizeOrderType = (orderType?: string | null): "POS" | "ONLINE" => {
+    const normalized = String(orderType || "").trim().toUpperCase();
+
+    if (
+      normalized === "POS" ||
+      normalized === "OFFLINE" ||
+      normalized === "COUNTER" ||
+      normalized === "IN_STORE" ||
+      normalized === "AT_COUNTER"
+    ) {
+      return "POS";
     }
 
-    if (order.fullAddress) {
-      return order.fullAddress;
+    if (
+      normalized === "ONLINE" ||
+      normalized === "WEB" ||
+      normalized === "WEBSITE" ||
+      normalized === "ONLINE_ORDER" ||
+      normalized === "DELIVERY" ||
+      normalized === "ECOMMERCE"
+    ) {
+      return "ONLINE";
     }
 
-    const parts = [order.address, order.ward, order.district, order.province]
-      .filter(Boolean)
-      .map((item) => String(item).trim());
-
-    if (parts.length > 0) {
-      return parts.join(', ');
-    }
-
-    return 'Chưa có địa chỉ';
+    return "ONLINE";
   };
+
+  const getOrderTypeLabel = (orderType?: string | null): OrderTypeLabel =>
+    normalizeOrderType(orderType) === "POS" ? "Tại quầy" : "Online";
+
+  const getCustomerName = (order: Order) =>
+    order.customerName ||
+    order.customer?.userProfile?.fullName ||
+    (normalizeOrderType(order.orderType) === "POS" ? "Khách lẻ" : "N/A");
+
+  const getDisplayTotal = (record: Order) =>
+    record.finalTotal ?? record.totalAmount ?? 0;
 
   const getStatusTag = (status: string) => {
     switch (normalizeStatus(status)) {
-      case 'DRAFT':
+      case "DRAFT":
         return <Tag color="default">Nháp</Tag>;
       case "PENDING":
         return <Tag color="gold">Chờ xác nhận</Tag>;
@@ -192,40 +211,44 @@ const OrderManagementPage = () => {
     }
   };
 
-  const getOrderTypeTag = (order: Order) => {
-    const type = normalizeOrderType(order);
-
-    switch (type) {
-      case 'POS':
-        return <Tag color="blue">Tại quầy</Tag>;
-      case "ONLINE":
-        return <Tag color="geekblue">Online</Tag>;
+  const getPaymentStatusTag = (paymentStatus?: string) => {
+    switch (String(paymentStatus ?? "").trim().toUpperCase()) {
+      case "PAID":
+        return <Tag color="green">Đã thanh toán</Tag>;
+      case "UNPAID":
+        return <Tag color="default">Chưa thanh toán</Tag>;
+      case "PENDING":
+        return <Tag color="gold">Chờ thanh toán</Tag>;
+      case "FAILED":
+        return <Tag color="red">Thanh toán thất bại</Tag>;
+      case "REFUNDED":
+        return <Tag color="blue">Đã hoàn tiền</Tag>;
       default:
-        return <Tag color="geekblue">Online</Tag>;
+        return <Tag>Chưa có thông tin</Tag>;
     }
+  };
+
+  const getOrderTypeTag = (order: Order) => {
+    const label = getOrderTypeLabel(order.orderType);
+    return <Tag color={label === "Tại quầy" ? "blue" : "geekblue"}>{label}</Tag>;
   };
 
   const normalizedKeyword = searchText.trim().toLowerCase();
 
   const baseFilteredOrders = useMemo(() => {
     return allOrders.filter((order) => {
-      const displayAddress = getDisplayAddress(order);
-
       const matchesKeyword =
         !normalizedKeyword ||
         [
           order.code,
-          order.customerName,
-          order.customer?.userProfile?.fullName,
+          getCustomerName(order),
           order.phone,
           order.fullAddress,
           order.address,
           order.province,
           order.district,
           order.ward,
-          displayAddress,
-          normalizeOrderType(order) === 'POS' ? 'bán tại quầy' : 'online',
-          normalizeOrderType(order) === 'POS' ? 'tại quầy' : 'bán online',
+          getOrderTypeLabel(order.orderType),
         ]
           .filter(Boolean)
           .some((value) =>
@@ -233,7 +256,7 @@ const OrderManagementPage = () => {
           );
 
       const matchesOrderType =
-        !orderTypeFilter || normalizeOrderType(order) === orderTypeFilter;
+        !orderTypeFilter || normalizeOrderType(order.orderType) === orderTypeFilter;
 
       const matchesDateRange = (() => {
         if (!dateRange || !dateRange[0] || !dateRange[1] || !order.createdAt) {
@@ -260,66 +283,42 @@ const OrderManagementPage = () => {
   };
 
   const columns: ProColumns<Order>[] = [
-    // {
-    //   title: "STT",
-    //   width: 64,
-    //   search: false,
-    //   align: "center",
-    //   render: (text, record, index) => index + 1, 
-    // },
     {
-      title: "Mã đơn hàng",
-      dataIndex: "code",
-      render: (text) => <Text strong>#{text}</Text>,
-      width: 150,
+      title: "STT",
+      width: 64,
+      search: false,
+      align: "center",
+      render: (_text, _record, index) => index + 1,
     },
     {
-      title: "Tên khách hàng",
+      title: "Mã đơn",
+      dataIndex: "code",
+      width: 150,
+      render: (text) => <Text strong>{text ? `#${text}` : "N/A"}</Text>,
+    },
+    {
+      title: "Loại đơn",
+      dataIndex: "orderType",
+      key: "orderType",
+      width: 120,
+      align: "center",
+      render: (_, record) => getOrderTypeTag(record),
+    },
+    {
+      title: "Khách hàng",
       dataIndex: "customerName",
       key: "customerName",
-      render: (_, record) =>
-        record.customerName || record.customer?.userProfile?.fullName || "N/A",
+      width: 180,
+      render: (_, record) => getCustomerName(record),
+    },
+    {
+      title: "Ngày đặt",
+      dataIndex: "createdAt",
+      valueType: "dateTime",
+      search: false,
       width: 160,
-    },
-    {
-      title: "SĐT",
-      dataIndex: "phone",
-      key: "phone",
-      render: (value) => value || "N/A",
-      width: 110,
-    },
-    {
-      title: "Địa chỉ nhận hàng",
-      dataIndex: "fullAddress",
-      key: "fullAddress",
-      width: 200,
-      render: (_, record) => {
-        const displayAddress = getDisplayAddress(record);
-
-        if (displayAddress === 'Bán tại quầy') {
-          return <Text type="secondary">{displayAddress}</Text>;
-        }
-
-        if (displayAddress === 'Chưa có địa chỉ') {
-          return <Text type="secondary">{displayAddress}</Text>;
-        }
-
-        return <Text>{displayAddress}</Text>;
-      },
-    },
-    {
-      title: "Mã giảm",
-      dataIndex: "voucherCode",
-      key: "voucherCode",
-      width: 120,
-      align: "center" as const, 
-      render: (dom: React.ReactNode) => { 
-        const code = dom as string | undefined; 
-        if (!code) {
-          return <Text type="secondary">Không có</Text>;
-        }
-        return <Tag color="green">{code}</Tag>;
-      },
+      render: (date: any) =>
+        date ? new Date(date).toLocaleString("vi-VN") : "N/A",
     },
     {
       title: "Tổng tiền",
@@ -328,38 +327,35 @@ const OrderManagementPage = () => {
       width: 140,
       render: (_, record: Order) => (
         <Text strong style={{ color: "#c81d1d" }}>
-          {record.totalAmount?.toLocaleString("vi-VN")} ₫
+          {formatCurrency(getDisplayTotal(record))}
         </Text>
       ),
     },
     {
-      title: "Ngày đặt",
-      dataIndex: "createdAt",
-      valueType: "dateTime",
-      search: false,
-      width: 140,
-      render: (date: any) =>
-        date ? new Date(date).toLocaleString("vi-VN") : "N/A",
-    },
-    {
       title: "Trạng thái",
       dataIndex: "status",
-      width: 120,
+      width: 130,
       render: (_, record) => getStatusTag(record.status),
     },
     {
-      title: "Loại đơn hàng",
-      dataIndex: "orderType",
-      key: "orderType",
-      width: 80,
-      render: (_, record) => getOrderTypeTag(record),
+      title: "Thanh toán",
+      dataIndex: "paymentStatus",
+      width: 145,
+      render: (_, record) => (
+        <Space direction="vertical" size={2}>
+          {getPaymentStatusTag(record.paymentStatus)}
+          {record.paymentMethodName && (
+            <Text type="secondary">{record.paymentMethodName}</Text>
+          )}
+        </Space>
+      ),
     },
     {
       title: "Thao tác",
       valueType: "option",
       align: "center",
       fixed: "right",
-      width: 110,
+      width: 170,
       render: (_, record) => [
         <Tooltip title="Xem chi tiết" key="view">
           <Button
@@ -373,6 +369,19 @@ const OrderManagementPage = () => {
             }}
           />
         </Tooltip>,
+
+        normalizeStatus(record.status) === "COMPLETED" && (
+          <Tooltip title="In hóa đơn" key="print">
+            <Button
+              icon={<PrinterOutlined />}
+              shape="circle"
+              type="text"
+              size="large"
+              loading={printingOrderId === record.id}
+              onClick={() => handlePrintInvoice(record)}
+            />
+          </Tooltip>
+        ),
 
         record.status === "PENDING" && (
           <Popconfirm
@@ -432,7 +441,6 @@ const OrderManagementPage = () => {
             </Tooltip>
           </Popconfirm>
         ),
-
       ],
     },
   ];
@@ -453,46 +461,39 @@ const OrderManagementPage = () => {
         dataSource={orders}
         rowKey="id"
         pagination={{ pageSize: 10 }}
-        scroll={{ x: 1600 }}
+        scroll={{ x: 1250 }}
       />
     );
   };
 
+  const getOrdersByStatus = (status: string) =>
+    baseFilteredOrders.filter((order) => normalizeStatus(order.status) === status);
+
   const tabItems = [
     {
       key: "PENDING",
-      label: `Chờ xác nhận (${baseFilteredOrders.filter((o) => o.status === "PENDING").length})`,
-      children: renderOrderTable(
-        baseFilteredOrders.filter((o) => o.status === "PENDING"),
-      ),
+      label: `Chờ xác nhận (${getOrdersByStatus("PENDING").length})`,
+      children: renderOrderTable(getOrdersByStatus("PENDING")),
     },
     {
       key: "CONFIRMED",
-      label: `Đã xác nhận (${baseFilteredOrders.filter((o) => o.status === "CONFIRMED").length})`,
-      children: renderOrderTable(
-        baseFilteredOrders.filter((o) => o.status === "CONFIRMED"),
-      ),
+      label: `Đã xác nhận (${getOrdersByStatus("CONFIRMED").length})`,
+      children: renderOrderTable(getOrdersByStatus("CONFIRMED")),
     },
     {
       key: "SHIPPING",
-      label: `Đang giao (${baseFilteredOrders.filter((o) => o.status === "SHIPPING").length})`,
-      children: renderOrderTable(
-        baseFilteredOrders.filter((o) => o.status === "SHIPPING"),
-      ),
+      label: `Đang giao (${getOrdersByStatus("SHIPPING").length})`,
+      children: renderOrderTable(getOrdersByStatus("SHIPPING")),
     },
     {
       key: "COMPLETED",
-      label: `Hoàn thành (${baseFilteredOrders.filter((o) => o.status === "COMPLETED").length})`,
-      children: renderOrderTable(
-        baseFilteredOrders.filter((o) => o.status === "COMPLETED"),
-      ),
+      label: `Hoàn thành (${getOrdersByStatus("COMPLETED").length})`,
+      children: renderOrderTable(getOrdersByStatus("COMPLETED")),
     },
     {
       key: "CANCELLED",
-      label: `Đã hủy (${baseFilteredOrders.filter((o) => o.status === "CANCELLED").length})`,
-      children: renderOrderTable(
-        baseFilteredOrders.filter((o) => o.status === "CANCELLED"),
-      ),
+      label: `Đã hủy (${getOrdersByStatus("CANCELLED").length})`,
+      children: renderOrderTable(getOrdersByStatus("CANCELLED")),
     },
   ];
 

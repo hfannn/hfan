@@ -99,4 +99,29 @@ public interface ProductVariantRepository extends JpaRepository<ProductVariant, 
             order by p.name asc, v.id asc
             """)
     List<ProductVariant> searchForPos(@Param("keyword") String keyword);
+
+    @Query("""
+            select v.id
+            from ProductVariant v
+            where v.product.id = :productId
+              and v.deletedAt is null
+              and (:excludedVariantId is null or v.id <> :excludedVariantId)
+              and (
+                    select count(vav)
+                    from VariantAttributeValue vav
+                    where vav.variant = v
+                      and vav.attributeValue.id in :attributeValueIds
+              ) = :attributeCount
+              and (
+                    select count(vavAll)
+                    from VariantAttributeValue vavAll
+                    where vavAll.variant = v
+              ) = :attributeCount
+            """)
+    List<Long> findDuplicateVariantIdsByAttributeValueIds(
+            @Param("productId") Long productId,
+            @Param("attributeValueIds") List<Long> attributeValueIds,
+            @Param("attributeCount") long attributeCount,
+            @Param("excludedVariantId") Long excludedVariantId
+    );
 }

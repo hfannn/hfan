@@ -1,12 +1,13 @@
 package com.vn.backend.controller;
 
+import com.vn.backend.dto.request.OrderItemRequest;
 import com.vn.backend.dto.request.ShippingEstimateRequest;
 import com.vn.backend.dto.response.ShippingEstimateResponse;
 import com.vn.backend.dto.response.ProductPriceResponse;
 import com.vn.backend.entity.ProductVariant;
 import com.vn.backend.repository.ProductVariantRepository;
+import com.vn.backend.service.GhnShippingService;
 import com.vn.backend.service.ProductPriceService;
-import com.vn.backend.service.impl.GHTKLogicHandler;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -22,7 +23,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class ShippingController {
 
-    private final GHTKLogicHandler ghtkLogicHandler;
+    private final GhnShippingService ghnShippingService;
     private final ProductVariantRepository productVariantRepository;
     private final ProductPriceService productPriceService;
 
@@ -37,16 +38,20 @@ public class ShippingController {
                 })
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        List<Integer> quantities = request.getItems().stream()
-                .map(ShippingEstimateRequest.ShippingItem::getQuantity)
+        List<OrderItemRequest> items = request.getItems().stream()
+                .map(item -> {
+                    OrderItemRequest orderItem = new OrderItemRequest();
+                    orderItem.setVariantId(item.getVariantId());
+                    orderItem.setQuantity(item.getQuantity());
+                    return orderItem;
+                })
                 .toList();
 
-        BigDecimal shippingFee = ghtkLogicHandler.calculateShippingFee(
-                request.getShippingInfo().getProvince(),
-                request.getShippingInfo().getDistrict(),
-                request.getShippingInfo().getAddress(),
+        BigDecimal shippingFee = ghnShippingService.calculateShippingFee(
+                request.getShippingInfo().getDistrictId(),
+                request.getShippingInfo().getWardCode(),
                 subTotal,
-                quantities
+                items
         );
 
         ShippingEstimateResponse response = new ShippingEstimateResponse();

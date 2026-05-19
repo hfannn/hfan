@@ -361,15 +361,15 @@ public class StatisticsExportServiceImpl implements StatisticsExportService {
             Font headerFont = new Font(Font.HELVETICA, 11, Font.BOLD);
             Font bodyFont = new Font(Font.HELVETICA, 10, Font.NORMAL);
 
-            document.add(new Paragraph("BAO CAO TRANG THAI DON HANG", titleFont));
+            document.add(new Paragraph("BÁO CÁO TRẠNG THÁI ĐƠN HÀNG", titleFont));
             document.add(new Paragraph(" "));
 
             PdfPTable table = new PdfPTable(3);
             table.setWidthPercentage(100);
 
-            table.addCell(new Phrase("Trang thai", headerFont));
-            table.addCell(new Phrase("Tong don", headerFont));
-            table.addCell(new Phrase("Tong tien", headerFont));
+            table.addCell(new Phrase("Trạng thái", headerFont));
+            table.addCell(new Phrase("Tổng đơn", headerFont));
+            table.addCell(new Phrase("Tổng tiền", headerFont));
 
             for (OrderStatusResponse item : data) {
                 table.addCell(new Phrase(item.status() != null ? item.status() : "", bodyFont));
@@ -425,14 +425,14 @@ public class StatisticsExportServiceImpl implements StatisticsExportService {
             document.add(new Paragraph("Chenh lech: " + compare.profit().diffValue() + " (" + compare.profit().diffPercent() + "%)", bodyFont));
             document.add(new Paragraph(" ", bodyFont));
 
-            document.add(new Paragraph("So don hien tai: " + compare.orders().currentValue(), bodyFont));
-            document.add(new Paragraph("So don ky truoc: " + compare.orders().previousValue(), bodyFont));
-            document.add(new Paragraph("Chenh lech: " + compare.orders().diffValue() + " (" + compare.orders().diffPercent() + "%)", bodyFont));
+            document.add(new Paragraph("Số đơn hiện tại: " + compare.orders().currentValue(), bodyFont));
+            document.add(new Paragraph("Số đơn kỳ trước: " + compare.orders().previousValue(), bodyFont));
+            document.add(new Paragraph("Chênh lệch: " + compare.orders().diffValue() + " (" + compare.orders().diffPercent() + "%)", bodyFont));
             document.add(new Paragraph(" ", bodyFont));
 
-            document.add(new Paragraph("San pham ban hien tai: " + compare.itemsSold().currentValue(), bodyFont));
-            document.add(new Paragraph("San pham ban ky truoc: " + compare.itemsSold().previousValue(), bodyFont));
-            document.add(new Paragraph("Chenh lech: " + compare.itemsSold().diffValue() + " (" + compare.itemsSold().diffPercent() + "%)", bodyFont));
+            document.add(new Paragraph("Sản phẩm bán hiện tại: " + compare.itemsSold().currentValue(), bodyFont));
+            document.add(new Paragraph("Sản phẩm bán kỳ trước: " + compare.itemsSold().previousValue(), bodyFont));
+            document.add(new Paragraph("Chênh lệch: " + compare.itemsSold().diffValue() + " (" + compare.itemsSold().diffPercent() + "%)", bodyFont));
 
             document.close();
             return out.toByteArray();

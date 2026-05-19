@@ -6,6 +6,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.List;
 
 @Component
@@ -25,7 +26,8 @@ public class GHTKLogicHandler {
                 .transport("road")
                 .build();
 
-        return ghtkService.calculateShippingFee(ghtkFeeRequest);
+        return ghtkService.calculateShippingFee(ghtkFeeRequest)
+                .divide(BigDecimal.valueOf(2), 0, RoundingMode.HALF_UP);
     }
 
 }

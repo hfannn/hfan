@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import {
   Table,
   Button,
@@ -23,6 +23,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { orderService } from "@/services/order.service";
 import MyOrdersPage from "./MyOrdersPage";
 import { useAuth } from "@/services/AuthContext";
+import { resolveImageUrl } from "@/utils/utils";
 
 const { Title, Text } = Typography;
 
@@ -49,13 +50,16 @@ interface CartItem {
 const CartPage = () => {
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]);
+  const [localQuantities, setLocalQuantities] = useState<Record<number, number>>({});
+  const [updatingItemIds, setUpdatingItemIds] = useState<Record<number, boolean>>({});
   const [loadingCart, setLoadingCart] = useState(true);
   const [loadingOrders, setLoadingOrders] = useState(true);
   const [allOrders, setAllOrders] = useState<any[]>([]);
-  const [ordersFetched, setOrdersFetched] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
   const { fetchOrderCount } = useAuth();
+  const quantityRequestSeqRef = useRef<Record<number, number>>({});
+  const updatingItemIdsRef = useRef<Record<number, boolean>>({});
 
   const activeTab = useMemo(
     () => new URLSearchParams(location.search).get("tab") || "cart",
@@ -63,36 +67,54 @@ const CartPage = () => {
   ); // eslint-disable-line
 
   const formatMoney = (value: number) =>
-    `${Number(value || 0).toLocaleString("vi-VN")} \u20ab`;
+    `${Number(value || 0).toLocaleString("vi-VN")} ₫`;
+
+  const mapCartItems = (items: any[] = []): CartItem[] =>
+    items.map((item: any) => ({
+      key: item.cartItemId,
+      id: item.cartItemId,
+      productId: item.productId,
+      image: resolveImageUrl(item.imageUrl) || "https://via.placeholder.com/80",
+      name: `${item.productName} - ${item.variantCode}`,
+      size: item.size,
+      color: item.color,
+      material: item.material,
+      price: Number(item.unitPrice ?? item.salePrice ?? item.price ?? 0),
+      originalPrice: Number(item.originalPrice ?? item.price ?? 0),
+      unitPrice: Number(item.unitPrice ?? item.salePrice ?? item.price ?? 0),
+      discountPercent: Number(item.discountPercent ?? 0),
+      isSale: Boolean(item.isSale),
+      quantity: Number(item.quantity ?? 0),
+      total: Number(
+        item.lineTotal ??
+          item.subTotal ??
+          Number(item.quantity || 0) *
+            Number(item.unitPrice ?? item.salePrice ?? item.price ?? 0),
+      ),
+      variantId: item.variantId,
+    }));
+
+  const applyCartResponse = (cartData: any) => {
+    const items = mapCartItems(cartData?.items || []);
+    const validKeys = new Set(items.map((item) => item.key));
+
+    setCartItems(items);
+    setLocalQuantities(
+      items.reduce<Record<number, number>>((acc, item) => {
+        acc[item.id] = item.quantity;
+        return acc;
+      }, {}),
+    );
+    setSelectedRowKeys((prev) => prev.filter((key) => validKeys.has(key)));
+    fetchOrderCount();
+  };
 
   const fetchCart = async () => {
     try {
       setLoadingCart(true);
 
       const response = await cartService.getCart();
-      const items = response.data.items.map((item: any) => ({
-        key: item.cartItemId,
-        id: item.cartItemId,
-        productId: item.productId,
-        image: item.imageUrl
-          ? `http://localhost:8080/api${item.imageUrl}`
-          : "https://via.placeholder.com/80",
-        name: `${item.productName} - ${item.variantCode}`,
-        size: item.size,
-        color: item.color,
-        material: item.material,
-        price: Number(item.unitPrice ?? item.salePrice ?? item.price ?? 0),
-        originalPrice: Number(item.originalPrice ?? item.price ?? 0),
-        unitPrice: Number(item.unitPrice ?? item.salePrice ?? item.price ?? 0),
-        discountPercent: Number(item.discountPercent ?? 0),
-        isSale: Boolean(item.isSale),
-        quantity: item.quantity,
-        total: Number(item.lineTotal ?? item.subTotal ?? 0),
-        variantId: item.variantId,
-      }));
-
-      setCartItems(items);
-      fetchOrderCount();
+      applyCartResponse(response.data);
     } catch (error: any) {
       console.error("Failed to fetch cart:", error);
 
@@ -137,27 +159,81 @@ const CartPage = () => {
     } else if (
       ["pending", "confirmed", "shipping", "completed", "cancelled"].includes(
         activeTab,
-      ) &&
-      !ordersFetched
+      )
     ) {
       fetchOrders();
-      setOrdersFetched(true);
     }
   }, [activeTab]);
 
-  const handleQuantityChange = async (
+
+  const setItemUpdating = (cartItemId: number, value: boolean) => {
+    updatingItemIdsRef.current[cartItemId] = value;
+    setUpdatingItemIds((prev) => ({
+      ...prev,
+      [cartItemId]: value,
+    }));
+  };
+
+  const handleQuantityInputChange = (
     cartItemId: number,
     quantity: number | null,
   ) => {
-    if (quantity === null || quantity < 1) return;
+    setLocalQuantities((prev) => ({
+      ...prev,
+      [cartItemId]: quantity === null ? 1 : Math.max(1, Number(quantity)),
+    }));
+  };
+
+  const handleQuantityCommit = async (
+    cartItemId: number,
+    quantity: number | null,
+  ) => {
+    const nextQuantity = Number(quantity);
+    const currentItem = cartItems.find((item) => item.id === cartItemId);
+
+    if (updatingItemIdsRef.current[cartItemId]) {
+      return;
+    }
+
+    if (!currentItem || !Number.isFinite(nextQuantity) || nextQuantity < 1) {
+      setLocalQuantities((prev) => ({
+        ...prev,
+        [cartItemId]: currentItem?.quantity ?? 1,
+      }));
+      return;
+    }
+
+    if (nextQuantity === currentItem.quantity) {
+      return;
+    }
+
+    const requestSeq = (quantityRequestSeqRef.current[cartItemId] || 0) + 1;
+    quantityRequestSeqRef.current[cartItemId] = requestSeq;
+    setItemUpdating(cartItemId, true);
+
     try {
-      await cartService.updateItemQuantity(cartItemId, quantity);
+      const response = await cartService.updateItemQuantity(
+        cartItemId,
+        nextQuantity,
+      );
+      if (quantityRequestSeqRef.current[cartItemId] !== requestSeq) {
+        return;
+      }
+      applyCartResponse(response.data);
       message.success("Cập nhật số lượng thành công!");
-      fetchCart();
-      fetchOrderCount();
-    } catch (error) {
-      message.error("Cập nhật số lượng thất bại!");
+    } catch (error: any) {
+      setLocalQuantities((prev) => ({
+        ...prev,
+        [cartItemId]: currentItem.quantity,
+      }));
+      message.error(
+        error?.response?.data?.message || "Cập nhật số lượng thất bại!",
+      );
       console.error("Failed to update quantity:", error);
+    } finally {
+      if (quantityRequestSeqRef.current[cartItemId] === requestSeq) {
+        setItemUpdating(cartItemId, false);
+      }
     }
   };
 
@@ -260,10 +336,16 @@ const CartPage = () => {
       render: (quantity: number, record: CartItem) => (
         <InputNumber
           min={1}
-          value={quantity}
-          onChange={(value) => {
-            handleQuantityChange(record.id, value);
-          }}
+          value={localQuantities[record.id] ?? quantity}
+          disabled={!!updatingItemIds[record.id]}
+          onChange={(value) => handleQuantityInputChange(record.id, value)}
+          onBlur={() =>
+            handleQuantityCommit(record.id, localQuantities[record.id] ?? quantity)
+          }
+          onPressEnter={() =>
+            handleQuantityCommit(record.id, localQuantities[record.id] ?? quantity)
+          }
+          onStep={(value) => handleQuantityCommit(record.id, Number(value))}
         />
       ),
     },
@@ -324,7 +406,19 @@ const CartPage = () => {
   };
 
   const filterOrdersByStatus = (status: string) => {
-    return allOrders.filter((order) => order.status === status);
+    const normalizeStatus = (value?: string) => {
+      const raw = String(value ?? "").trim().toUpperCase();
+
+      if (["PENDING", "WAITING_CONFIRM"].includes(raw)) return "PENDING";
+      if (["CONFIRMED"].includes(raw)) return "CONFIRMED";
+      if (["SHIPPING", "DELIVERING"].includes(raw)) return "SHIPPING";
+      if (["COMPLETED"].includes(raw)) return "COMPLETED";
+      if (["CANCELLED", "CANCELED"].includes(raw)) return "CANCELLED";
+
+      return raw;
+    };
+
+    return allOrders.filter((order) => normalizeStatus(order.status) === status);
   };
 
   const tabItems = [
@@ -343,6 +437,7 @@ const CartPage = () => {
                   rowSelection={rowSelection}
                   columns={columns}
                   dataSource={cartItems}
+                  rowKey="id"
                   pagination={false}
                 />
               </Spin>

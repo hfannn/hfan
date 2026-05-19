@@ -31,14 +31,14 @@ const formatRange = (min?: number | null, max?: number | null) => {
 
 const formatFromRange = (min?: number | null, max?: number | null) => {
   if (min == null || max == null) {
-    return "ChÆ°a cÃ³ giÃ¡";
+    return "Chưa có giá";
   }
 
   if (Number(min) === Number(max)) {
     return money(Number(min));
   }
 
-  return `Tá»« ${money(Number(min))}`;
+  return `Từ ${money(Number(min))}`;
 };
 
 const ProductListDisplay = ({ products, hideTitle = false }: ProductProps) => {
@@ -53,7 +53,9 @@ const ProductListDisplay = ({ products, hideTitle = false }: ProductProps) => {
           <Title level={2} style={{ margin: 0 }}>
             Danh sách sản phẩm
           </Title>
-          <Text type="secondary">Chọn sản phẩm để xem size, màu và tồn kho</Text>
+          <Text type="secondary">
+            Chọn sản phẩm để xem size, màu và tồn kho
+          </Text>
         </div>
       )}
 
@@ -90,7 +92,7 @@ const ProductListDisplay = ({ products, hideTitle = false }: ProductProps) => {
                   <Link to={`/products/${p.id}`} className="product-card-cover">
                     {p.isSale && Number(p.discountPercent) > 0 && (
                       <Tag color="red" className="product-sale-badge">
-                        {isPartialSale || hasMultipleVariantPrices ? "Tá»« " : ""}-
+                        {isPartialSale || hasMultipleVariantPrices ? "Từ " : ""}-
                         {Number(p.discountPercent).toFixed(0)}%
                       </Tag>
                     )}
@@ -122,26 +124,26 @@ const ProductListDisplay = ({ products, hideTitle = false }: ProductProps) => {
                         </Tooltip>
                       </Link>
                       <div>
-                    {
-                    p.isSale && Number(p.discountPercent) > 0 ? (
-                      <Space direction="vertical" size={2}>
-                        <span className="product-price">
-                          {formatFromRange(
-                            p.minSalePrice ?? p.salePrice ?? p.minPrice,
-                            p.maxSalePrice ?? p.maxPrice,
-                          )}
-                        </span>
-                        <span className="product-original-price">
-                          {formatFromRange(
-                            p.minOriginalPrice ?? p.minPrice,
-                            p.maxOriginalPrice ?? p.maxPrice,
-                          )}
-                        </span>
-                      </Space>
-                    ) : (
-                      <span className="product-price">{formatFromRange(p.minPrice, p.maxPrice)}</span>
-                    )
-                    }
+                        {p.isSale && Number(p.discountPercent) > 0 ? (
+                          <Space direction="vertical" size={2}>
+                            <span className="product-price">
+                              {formatFromRange(
+                                p.minSalePrice ?? p.salePrice ?? p.minPrice,
+                                p.maxSalePrice ?? p.maxPrice,
+                              )}
+                            </span>
+                            <span className="product-original-price">
+                              {formatFromRange(
+                                p.minOriginalPrice ?? p.minPrice,
+                                p.maxOriginalPrice ?? p.maxPrice,
+                              )}
+                            </span>
+                          </Space>
+                        ) : (
+                          <span className="product-price">
+                            {formatFromRange(p.minPrice, p.maxPrice)}
+                          </span>
+                        )}
                       </div>
                     </Space>
                   }

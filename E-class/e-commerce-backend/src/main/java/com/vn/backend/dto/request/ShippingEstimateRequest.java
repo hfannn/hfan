@@ -13,6 +13,8 @@ public class ShippingEstimateRequest {
     public static class ShippingInfo {
         private String province;
         private String district;
+        private Integer districtId;
+        private String wardCode;
         private String address;
     }
 
