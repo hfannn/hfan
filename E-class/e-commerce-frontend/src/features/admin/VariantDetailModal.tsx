@@ -21,7 +21,8 @@
 import { useState, useEffect, useMemo } from "react";
 import { EditOutlined, DeleteOutlined, PlusOutlined } from "@ant-design/icons";
 import { getProductAttributeLabel } from "@/utils/productAttributeLabel";
-import { productService } from "@/services/product.service";
+import { productService, ProductVariantUpdatePayload } from "@/services/product.service";
+import EditVariantModal from "./EditVariantModal";
 
 export interface ProductVariantAttributes {
   [key: string]: string;
@@ -63,6 +64,9 @@ export interface ProductDetail {
   supplierId?: number;
   supplierName?: string;
 
+  materialId?: number;
+  materialName?: string;
+
   isActive: boolean;
   variants: Variant[];
   images: string[];
@@ -72,7 +76,7 @@ interface VariantDetailModalProps {
   open: boolean;
   productId: number | null;
   onCancel: () => void;
-  onEdit: (record: Variant) => void;
+  onEdit?: (record: Variant) => void;
   onDelete: (id: number) => void;
   onAddVariant: (data: { productId: number; variants: any[] }) => Promise<void>;
   refreshKey?: number;
@@ -84,7 +88,7 @@ interface AttributeOption {
   id: number;
 }
 
-const UNIQUE_ATTRIBUTE_CODES = ["COLOR", "SIZE", "MATERIAL"];
+const UNIQUE_ATTRIBUTE_CODES = ["COLOR", "SIZE"];
 
 const VariantDetailModal: React.FC<VariantDetailModalProps> = ({
   open,
@@ -114,6 +118,9 @@ const VariantDetailModal: React.FC<VariantDetailModalProps> = ({
     "all" | "active" | "inactive"
   >("all");
   const [duplicateRowIndexes, setDuplicateRowIndexes] = useState<number[]>([]);
+
+  const [editingVariant, setEditingVariant] = useState<Variant | null>(null);
+  const [editVariantLoading, setEditVariantLoading] = useState(false);
 
   const fetchProductDetails = async () => {
     if (!productId) {
@@ -420,6 +427,65 @@ const VariantDetailModal: React.FC<VariantDetailModalProps> = ({
     });
   }, [product?.variants, variantKeyword, variantStockStatus, variantActiveStatus]);
 
+  const displayAttributes = useMemo(
+    () =>
+      dynamicAttributes.filter((attr: any) =>
+        ["COLOR", "SIZE"].includes(String(attr.code).toUpperCase()),
+      ),
+    [dynamicAttributes],
+  );
+
+  const colorOptions = useMemo(() => {
+    const attr = dynamicAttributes.find(
+      (a: any) => String(a.code).toUpperCase() === "COLOR",
+    );
+    return (attr?.values || []).map((v: any) => ({
+      label: v.label || v.value,
+      value: v.value,
+      id: v.id,
+    }));
+  }, [dynamicAttributes]);
+
+  const sizeOptions = useMemo(() => {
+    const attr = dynamicAttributes.find(
+      (a: any) => String(a.code).toUpperCase() === "SIZE",
+    );
+    return (attr?.values || []).map((v: any) => ({
+      label: v.label || v.value,
+      value: v.value,
+      id: v.id,
+    }));
+  }, [dynamicAttributes]);
+
+  const handleSaveVariant = async (
+    variantId: number,
+    values: ProductVariantUpdatePayload,
+  ) => {
+    setEditVariantLoading(true);
+
+    try {
+      await productService.updateVariant(variantId, values);
+
+      notification.success({
+        message: "Thành công",
+        description: "Cập nhật biến thể thành công.",
+      });
+
+      setEditingVariant(null);
+      fetchProductDetails();
+    } catch (error: any) {
+      notification.error({
+        message: "Lỗi cập nhật biến thể",
+        description:
+          error?.response?.data?.message ||
+          error?.response?.data ||
+          "Không thể cập nhật biến thể.",
+      });
+    } finally {
+      setEditVariantLoading(false);
+    }
+  };
+
   const handleAddVariantFinish = async (values: any) => {
     if (!productId) {
       return;
@@ -561,7 +627,7 @@ const VariantDetailModal: React.FC<VariantDetailModalProps> = ({
       fixed: "right" as const,
       render: (_: any, record: Variant) => (
         <Space>
-          <Button icon={<EditOutlined />} onClick={() => onEdit(record)}>
+          <Button icon={<EditOutlined />} onClick={() => setEditingVariant(record)}>
             Sửa
           </Button>
 
@@ -622,6 +688,10 @@ const VariantDetailModal: React.FC<VariantDetailModalProps> = ({
                 {product.supplierName || "-"}
               </Descriptions.Item>
 
+              <Descriptions.Item label="Chất liệu">
+                {product.materialName || "-"}
+              </Descriptions.Item>
+
               <Descriptions.Item label="Trạng thái">
                 <Tag color={product.isActive ? "green" : "red"}>
                   {product.isActive ? "Đang bán" : "Ngừng bán"}
@@ -642,7 +712,7 @@ const VariantDetailModal: React.FC<VariantDetailModalProps> = ({
                 <Col xs={24} md={9}>
                   <Input.Search
                     allowClear
-                    placeholder="Lọc SKU, màu sắc, kích cỡ, chất liệu..."
+                    placeholder="Lọc SKU, màu sắc, kích cỡ..."
                     value={variantKeyword}
                     onChange={(e) => setVariantKeyword(e.target.value)}
                     onSearch={(value) => setVariantKeyword(value)}
@@ -711,7 +781,7 @@ const VariantDetailModal: React.FC<VariantDetailModalProps> = ({
               <Typography.Text>Tạo hàng loạt theo thuộc tính</Typography.Text>
 
               <Row gutter={[16, 16]} wrap>
-                {dynamicAttributes.map((attr) => (
+                {displayAttributes.map((attr) => (
                   <Col flex="1 1 200px" key={attr.code}>
                     <Select
                       mode="multiple"
@@ -799,7 +869,7 @@ const VariantDetailModal: React.FC<VariantDetailModalProps> = ({
                   <Typography.Text strong>SKU</Typography.Text>
                 </Col>
 
-                {dynamicAttributes.map((attr) => (
+                {displayAttributes.map((attr) => (
                   <Col span={3} key={attr.code}>
                     <Typography.Text strong>{attr.name}</Typography.Text>
                   </Col>
@@ -848,7 +918,7 @@ const VariantDetailModal: React.FC<VariantDetailModalProps> = ({
                           </Form.Item>
                         </Col>
 
-                        {dynamicAttributes.map((attr) => (
+                        {displayAttributes.map((attr) => (
                           <Col span={3} key={attr.code}>
                             <Form.Item
                               {...restField}
@@ -950,6 +1020,17 @@ const VariantDetailModal: React.FC<VariantDetailModalProps> = ({
           </Space>
         )}
       </Spin>
+
+      <EditVariantModal
+        open={editingVariant !== null}
+        variant={editingVariant}
+        confirmLoading={editVariantLoading}
+        onCancel={() => setEditingVariant(null)}
+        onSave={handleSaveVariant}
+        colorOptions={colorOptions}
+        sizeOptions={sizeOptions}
+        otherVariants={product?.variants || []}
+      />
     </Modal>
   );
 };

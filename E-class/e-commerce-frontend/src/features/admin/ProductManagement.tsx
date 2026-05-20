@@ -30,11 +30,9 @@ import { API_BASE_URL } from "@/services/axiosClient";
 import {
   productService,
   ProductUpdatePayload,
-  ProductVariantUpdatePayload,
 } from "@/services/product.service";
 import EditProductModal from "./EditProductModal";
-import EditVariantModal from "./EditVariantModal";
-import VariantDetailModal, { Variant } from "./VariantDetailModal";
+import VariantDetailModal from "./VariantDetailModal";
 
 interface ProductList {
   id: number;
@@ -54,7 +52,7 @@ interface ProductListWithVariants extends ProductList {
   key: Key;
   hasVariants: boolean;
   hasPendingOrder: boolean;
-  variants: Variant[];
+  variants: any[];
 }
 
 type ProductForTable = ProductListWithVariants & {
@@ -102,9 +100,6 @@ const ProductManagementPage = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   const [isVariantDetailModalOpen, setIsVariantDetailModalOpen] = useState(false);
-  const [isEditVariantModalOpen, setIsEditVariantModalOpen] = useState(false);
-  const [editingVariant, setEditingVariant] = useState<Variant | null>(null);
-  const [editVariantLoading, setEditVariantLoading] = useState(false);
   const [variantDetailRefreshKey, setVariantDetailRefreshKey] = useState(0);
 
   const [isEditProductModalOpen, setIsEditProductModalOpen] = useState(false);
@@ -275,6 +270,7 @@ const ProductManagementPage = () => {
         categoryId: values.category_id ? Number(values.category_id) : null,
         originId: values.origin_id ? Number(values.origin_id) : null,
         supplierId: values.supplier_id ? Number(values.supplier_id) : null,
+        materialId: values.material_id ? Number(values.material_id) : null,
         isActive: values.is_active ?? true,
       };
 
@@ -324,9 +320,15 @@ const ProductManagementPage = () => {
       });
 
       const productRes = await productService.createProductWithImages(formData);
-      const createdProductId = productRes?.data?.id || productRes?.data?.data?.id;
+      const data = productRes?.data;
+      const createdProductId =
+        data?.productId ||
+        data?.id ||
+        data?.data?.productId ||
+        data?.data?.id;
 
       if (!createdProductId) {
+        console.error("Create product response:", productRes);
         throw new Error("Không lấy được productId sau khi tạo sản phẩm");
       }
 
@@ -338,11 +340,7 @@ const ProductManagementPage = () => {
             sellingPrice: item.selling_price,
             stockQuantity: item.stock_quantity,
             isActive: item.is_active,
-            attributeValueIds: [
-              item.color_id,
-              item.size_id,
-              item.material_id,
-            ].filter(Boolean),
+            attributeValueIds: [item.color_id, item.size_id].filter(Boolean),
           })),
         });
       }
@@ -408,42 +406,6 @@ const ProductManagementPage = () => {
       });
     } finally {
       setEditProductLoading(false);
-    }
-  };
-
-  const handleOpenEditVariant = (variant: Variant) => {
-    setEditingVariant(variant);
-    setIsEditVariantModalOpen(true);
-  };
-
-  const handleUpdateVariant = async (
-    variantId: number,
-    values: ProductVariantUpdatePayload,
-  ) => {
-    setEditVariantLoading(true);
-
-    try {
-      await productService.updateVariant(variantId, values);
-
-      notification.success({
-        message: "Thành công",
-        description: "Cập nhật biến thể thành công.",
-      });
-
-      setIsEditVariantModalOpen(false);
-      setEditingVariant(null);
-      fetchProducts();
-      setVariantDetailRefreshKey((prev) => prev + 1);
-    } catch (error: any) {
-      notification.error({
-        message: "Lỗi cập nhật biến thể",
-        description:
-          error?.response?.data?.message ||
-          error?.response?.data ||
-          "Không thể cập nhật biến thể.",
-      });
-    } finally {
-      setEditVariantLoading(false);
     }
   };
 
@@ -849,7 +811,6 @@ const ProductManagementPage = () => {
           setIsVariantDetailModalOpen(false);
           setSelectedProductId(null);
         }}
-        onEdit={handleOpenEditVariant}
         onDelete={handleDeleteVariant}
         onAddVariant={handleAddVariant}
         refreshKey={variantDetailRefreshKey}
@@ -866,16 +827,6 @@ const ProductManagementPage = () => {
         onSave={handleUpdateProduct}
       />
 
-      <EditVariantModal
-        open={isEditVariantModalOpen}
-        variant={editingVariant}
-        confirmLoading={editVariantLoading}
-        onCancel={() => {
-          setIsEditVariantModalOpen(false);
-          setEditingVariant(null);
-        }}
-        onSave={handleUpdateVariant}
-      />
     </Card>
   );
 };

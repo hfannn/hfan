@@ -37,8 +37,11 @@ import com.vn.backend.entity.Customer;
 import com.vn.backend.entity.User;
 import com.vn.backend.repository.CustomerRepository;
 import com.vn.backend.repository.UserRepository;
+import com.vn.backend.dto.response.ValidateDiscountResponse;
 import com.vn.backend.exception.InvalidRequestException;
 import com.vn.backend.exception.ResourceNotFoundException;
+import com.vn.backend.service.DiscountService;
+import org.springframework.util.StringUtils;
 
 @Service
 @RequiredArgsConstructor
@@ -75,6 +78,8 @@ public class VnpayServiceImpl implements com.vn.backend.service.VnpayService {
     private final CouponUsageRepository couponUsageRepository;
     private final OrderStatusHistoryRepository orderStatusHistoryRepository;
     private final OrderInventoryService orderInventoryService;
+    private final StockReservationService stockReservationService;
+    private final DiscountService discountService;
 
 
     @Override
@@ -132,7 +137,7 @@ public class VnpayServiceImpl implements com.vn.backend.service.VnpayService {
         vnpParams.put("vnp_ReturnUrl", vnpayConfig.getPosReturnUrl());
         vnpParams.put("vnp_IpAddr", getClientIp(httpServletRequest));
         vnpParams.put("vnp_CreateDate", now.format(VNPAY_DATE_FORMAT));
-        vnpParams.put("vnp_ExpireDate", now.plusMinutes(15).format(VNPAY_DATE_FORMAT));
+        vnpParams.put("vnp_ExpireDate", now.plusMinutes(2).format(VNPAY_DATE_FORMAT));
 
         String hashData = VnpayUtil.buildHashData(vnpParams);
         String secureHash = VnpayUtil.hmacSHA512(vnpayConfig.getHashSecret(), hashData);
@@ -352,11 +357,22 @@ public class VnpayServiceImpl implements com.vn.backend.service.VnpayService {
 
         Payment payment = paymentRepository
                 .findTopByOrder_IdAndPaymentMethod_CodeOrderByIdDesc(orderId, PAYMENT_CODE_VNPAY)
-                .orElseThrow(() -> new IllegalArgumentException("Đơn hàng này không được tạo với phương thức VNPAY"));
+                .orElseThrow(() -> new IllegalArgumentException("Don hang nay khong duoc tao voi phuong thuc VNPAY"));
 
         if (PAYMENT_STATUS_PAID.equalsIgnoreCase(payment.getStatus())) {
             throw new IllegalArgumentException("Đơn hàng này đã được thanh toán");
         }
+
+        // Release reservation cu neu co (user retry payment)
+        stockReservationService.releaseReservations(order.getId(), "RETRY_VNPAY_PAYMENT");
+
+        // Re-validate voucher, recalculate order amounts, and reserve the voucher slot.
+        // Throws InvalidRequestException if voucher is now invalid or limit is reached.
+        recalculateAndSaveVoucherForVnpay(order, userId);
+
+        // Tao reservation mem 2 phut — kiem tra availableStock truoc khi tao URL
+        // Neu khong du hang se throw ngay tai day, khong tao URL
+        stockReservationService.createReservationsForVnpay(order, 2);
 
         String txnRef = generateUniqueTxnRef("ONL", order.getId());
 
@@ -387,7 +403,7 @@ public class VnpayServiceImpl implements com.vn.backend.service.VnpayService {
         vnpParams.put("vnp_ReturnUrl", vnpayConfig.getOnlineReturnUrl());
         vnpParams.put("vnp_IpAddr", getClientIp(httpServletRequest));
         vnpParams.put("vnp_CreateDate", now.format(VNPAY_DATE_FORMAT));
-        vnpParams.put("vnp_ExpireDate", now.plusMinutes(15).format(VNPAY_DATE_FORMAT));
+        vnpParams.put("vnp_ExpireDate", now.plusMinutes(2).format(VNPAY_DATE_FORMAT));
 
         String hashData = VnpayUtil.buildHashData(vnpParams);
         String secureHash = VnpayUtil.hmacSHA512(vnpayConfig.getHashSecret(), hashData);
@@ -495,6 +511,43 @@ public class VnpayServiceImpl implements com.vn.backend.service.VnpayService {
         return "{\"RspCode\":\"00\",\"Message\":\"Confirm Success\"}";
     }
 
+    private void recalculateAndSaveVoucherForVnpay(Order order, Long userId) {
+        String voucherCode = order.getVoucherCode();
+        if (!StringUtils.hasText(voucherCode)) {
+            return;
+        }
+
+        BigDecimal subtotal = defaultZero(order.getSubtotalBeforeVoucher());
+
+        // Re-validate with PESSIMISTIC_WRITE lock — throws if voucher invalid or limit reached
+        ValidateDiscountResponse discount = discountService.validateDiscountForConsume(
+                voucherCode, subtotal, userId);
+
+        BigDecimal newDiscount = defaultZero(discount.getDiscountAmount());
+        BigDecimal oldDiscount = defaultZero(order.getDiscountAmount());
+
+        if (newDiscount.compareTo(oldDiscount) != 0) {
+            order.setDiscountAmount(newDiscount);
+            order.setProductRevenue(subtotal.subtract(newDiscount).max(BigDecimal.ZERO));
+            BigDecimal newTotal = subtotal.subtract(newDiscount)
+                    .add(defaultZero(order.getShippingFee()))
+                    .max(BigDecimal.ZERO);
+            order.setTotalAmount(newTotal);
+            orderRepository.save(order);
+        }
+
+        // Reserve the voucher slot eagerly. Released on payment failure/cancel/expiry.
+        Coupon coupon = couponRepository.findByCodeAndIsActiveTrue(voucherCode).orElse(null);
+        if (coupon != null && order.getCustomer() != null) {
+            couponUsageRepository.deleteByOrder_Id(order.getId());
+            couponUsageRepository.save(CouponUsage.builder()
+                    .coupon(coupon)
+                    .customer(order.getCustomer())
+                    .order(order)
+                    .build());
+        }
+    }
+
     private void validateOnlineOrderOwner(Order order, Customer customer) {
         if (order.getCustomer() == null || !order.getCustomer().getId().equals(customer.getId())) {
             throw new InvalidRequestException("Bạn không có quyền thanh toán đơn hàng này");
@@ -532,7 +585,13 @@ public class VnpayServiceImpl implements com.vn.backend.service.VnpayService {
         if (order != null) {
             if (ORDER_TYPE_ONLINE.equalsIgnoreCase(order.getOrderType())
                     && !Boolean.TRUE.equals(order.getInventoryReserved())) {
-                orderInventoryService.reserveStockForOnlineOrder(order);
+                // Xac nhan reservation va tru stockQuantity that
+                // Idempotent: neu khong co RESERVED hoac da CONFIRMED thi return false
+                boolean deducted = stockReservationService.confirmAndDeductStock(order.getId());
+                if (deducted) {
+                    order.setInventoryReserved(true);
+                    order.setInventoryReservedAt(OffsetDateTime.now());
+                }
             }
 
             order.setCustomerPaid(defaultZero(payment.getAmount()));
@@ -568,7 +627,8 @@ public class VnpayServiceImpl implements com.vn.backend.service.VnpayService {
         Order order = payment.getOrder();
         if (order != null && ORDER_TYPE_ONLINE.equalsIgnoreCase(order.getOrderType())) {
             String previousStatus = order.getStatus();
-            orderInventoryService.releaseStockForOrder(order, "ONLINE_VNPAY_FAILED_" + source);
+            // Release soft reservation (khong tru stockQuantity that)
+            stockReservationService.releaseReservations(order.getId(), "VNPAY_FAILED_" + source);
             if (!ORDER_STATUS_CANCELLED.equalsIgnoreCase(order.getStatus())) {
                 order.setStatus(ORDER_STATUS_CANCELLED);
                 saveOrderStatusHistory(order, previousStatus, ORDER_STATUS_CANCELLED);

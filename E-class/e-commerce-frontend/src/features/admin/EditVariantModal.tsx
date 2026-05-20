@@ -1,4 +1,4 @@
-import { Modal, Form, Input, InputNumber, Switch } from "antd";
+import { Modal, Form, Input, InputNumber, Switch, Select, notification } from "antd";
 import { useEffect } from "react";
 import { ProductVariantUpdatePayload } from "@/services/product.service";
 
@@ -12,12 +12,21 @@ export interface Variant {
   attributes?: Record<string, string>;
 }
 
+interface AttributeOption {
+  label: string;
+  value: string;
+  id: number;
+}
+
 interface EditVariantModalProps {
   open: boolean;
   variant: Variant | null;
   confirmLoading?: boolean;
   onCancel: () => void;
   onSave: (variantId: number, values: ProductVariantUpdatePayload) => Promise<void> | void;
+  colorOptions?: AttributeOption[];
+  sizeOptions?: AttributeOption[];
+  otherVariants?: Array<{ id: number; attributes?: Record<string, string> }>;
 }
 
 const EditVariantModal: React.FC<EditVariantModalProps> = ({
@@ -26,6 +35,9 @@ const EditVariantModal: React.FC<EditVariantModalProps> = ({
   confirmLoading = false,
   onCancel,
   onSave,
+  colorOptions = [],
+  sizeOptions = [],
+  otherVariants = [],
 }) => {
   const [form] = Form.useForm();
 
@@ -35,6 +47,8 @@ const EditVariantModal: React.FC<EditVariantModalProps> = ({
     }
 
     form.setFieldsValue({
+      color: variant.attributes?.COLOR,
+      size: variant.attributes?.SIZE,
       code: variant.code,
       costPrice: variant.costPrice,
       sellingPrice: variant.sellingPrice,
@@ -50,12 +64,42 @@ const EditVariantModal: React.FC<EditVariantModalProps> = ({
       return;
     }
 
+    const attributeValueIds: number[] = [];
+
+    if (values.color && colorOptions.length > 0) {
+      const colorOpt = colorOptions.find((o) => o.value === values.color);
+      if (colorOpt) attributeValueIds.push(colorOpt.id);
+    }
+
+    if (values.size && sizeOptions.length > 0) {
+      const sizeOpt = sizeOptions.find((o) => o.value === values.size);
+      if (sizeOpt) attributeValueIds.push(sizeOpt.id);
+    }
+
+    if (otherVariants.length > 0 && values.color && values.size) {
+      const duplicate = otherVariants.find(
+        (v) =>
+          v.id !== variant.id &&
+          v.attributes?.COLOR === values.color &&
+          v.attributes?.SIZE === values.size,
+      );
+
+      if (duplicate) {
+        notification.error({
+          message: "Biến thể bị trùng",
+          description: `Đã tồn tại biến thể với màu ${values.color} và kích cỡ ${values.size}.`,
+        });
+        return;
+      }
+    }
+
     await onSave(variant.id, {
       code: values.code,
       costPrice: values.costPrice,
       sellingPrice: values.sellingPrice,
       stockQuantity: values.stockQuantity,
       isActive: values.isActive,
+      attributeValueIds: attributeValueIds.length > 0 ? attributeValueIds : undefined,
     });
 
     form.resetFields();
@@ -73,6 +117,32 @@ const EditVariantModal: React.FC<EditVariantModalProps> = ({
       cancelText="Hủy"
     >
       <Form form={form} layout="vertical">
+        {colorOptions.length > 0 && (
+          <Form.Item
+            name="color"
+            label="Màu sắc"
+            rules={[{ required: true, message: "Vui lòng chọn màu sắc" }]}
+          >
+            <Select
+              placeholder="Chọn màu sắc"
+              options={colorOptions.map((o) => ({ label: o.label, value: o.value }))}
+            />
+          </Form.Item>
+        )}
+
+        {sizeOptions.length > 0 && (
+          <Form.Item
+            name="size"
+            label="Kích cỡ"
+            rules={[{ required: true, message: "Vui lòng chọn kích cỡ" }]}
+          >
+            <Select
+              placeholder="Chọn kích cỡ"
+              options={sizeOptions.map((o) => ({ label: o.label, value: o.value }))}
+            />
+          </Form.Item>
+        )}
+
         <Form.Item
           name="code"
           label="SKU / Mã biến thể"

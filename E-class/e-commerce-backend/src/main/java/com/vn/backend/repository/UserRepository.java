@@ -21,7 +21,7 @@ public interface UserRepository extends JpaRepository<User, Long> {
             u.id,
             u.username,
             u.email,
-            r.name,
+            r.code,
             up.fullName,
             u.isActive
         )
@@ -37,7 +37,7 @@ public interface UserRepository extends JpaRepository<User, Long> {
             u.id,
             u.username,
             u.email,
-            r.name,
+            r.code,
             up.fullName,
             u.isActive
         )
@@ -66,5 +66,7 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     @Query(value = "SELECT * FROM users WHERE id = :id", nativeQuery = true)
     Optional<User> findByIdIncludingDeleted(@Param("id") Long id);
-    Optional<User> findByUsername(String username);
+
+    @Query("SELECT u FROM User u WHERE u.username = :username AND u.deletedAt IS NULL")
+    Optional<User> findByUsername(@Param("username") String username);
 }

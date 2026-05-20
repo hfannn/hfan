@@ -38,14 +38,7 @@ public class HomeServiceImpl implements HomeService {
                 .limit(safeLimit)
                 .toList();
 
-        List<Long> usedAfterFeatured = java.util.stream.Stream
-                .concat(usedIds.stream(), featuredProducts.stream().map(HomeProductResponse::getProductId))
-                .toList();
-
-        List<HomeProductResponse> bestSellerProducts = getBestSellers(safeLimit * 2).stream()
-                .filter(item -> !usedAfterFeatured.contains(item.getProductId()))
-                .limit(safeLimit)
-                .toList();
+        List<HomeProductResponse> bestSellerProducts = getBestSellers(safeLimit);
 
         return new HomeResponse(featuredProducts, promotionProducts, bestSellerProducts);
     }

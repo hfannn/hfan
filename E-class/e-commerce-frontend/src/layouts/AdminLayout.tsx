@@ -1,18 +1,16 @@
 import {
   AppstoreOutlined,
-  BellOutlined,
   DashboardOutlined,
   LogoutOutlined,
   ShopOutlined,
   SolutionOutlined,
   StarOutlined,
   TagsOutlined,
-  TeamOutlined,
   UserOutlined,
 } from "@ant-design/icons";
 import ProLayout, { PageContainer } from "@ant-design/pro-layout";
 import proViVN from "@ant-design/pro-provider/es/locale/vi_VN";
-import { Avatar, Badge, ConfigProvider, Dropdown, Space } from "antd";
+import { Avatar, ConfigProvider, Dropdown, Space } from "antd";
 import antdViVN from "antd/locale/vi_VN";
 import { Link, Navigate, Outlet, useLocation, useNavigate } from "react-router-dom";
 import ChatbotWidget from "@/features/chatbot/ChatbotWidget";
@@ -158,18 +156,6 @@ const AdminLayout = () => {
               icon: <StarOutlined />,
             },
             {
-              key: "/admin/employees",
-              path: "/admin/employees",
-              name: "Nhân viên",
-              icon: <TeamOutlined />,
-            },
-            {
-              key: "/admin/customers",
-              path: "/admin/customers",
-              name: "Khách hàng",
-              icon: <UserOutlined />,
-            },
-            {
               key: "/admin/discounts",
               name: "Khuyến mãi",
               icon: <TagsOutlined />,
@@ -195,10 +181,7 @@ const AdminLayout = () => {
           }}
           actionsRender={() => [
             <Space size="middle" key="admin-actions">
-              <Badge count={5} size="small">
-                <BellOutlined style={{ color: "#344054", fontSize: 18 }} />
-              </Badge>
-              <Dropdown
+<Dropdown
                 menu={{ items: userMenuItems }}
                 placement="bottomRight"
                 key="user-menu"

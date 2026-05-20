@@ -35,6 +35,20 @@ public class RestExceptionHandler {
         return build(HttpStatus.BAD_REQUEST, msg);
     }
 
+    @ExceptionHandler(VoucherChangedException.class)
+    public ResponseEntity<Map<String, Object>> voucherChanged(VoucherChangedException ex) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("status", HttpStatus.CONFLICT.value());
+        body.put("errorCode", "NEED_CONFIRM_VOUCHER_CHANGED");
+        body.put("message", "Voucher da thay doi");
+        body.put("voucherCode", ex.getVoucherCode());
+        body.put("oldDiscountAmount", ex.getOldDiscountAmount());
+        body.put("newDiscountAmount", ex.getNewDiscountAmount());
+        body.put("oldFinalTotal", ex.getOldFinalTotal());
+        body.put("newFinalTotal", ex.getNewFinalTotal());
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(body);
+    }
+
     private ResponseEntity<Map<String, Object>> build(HttpStatus status, String message) {
         Map<String, Object> body = new HashMap<>();
         body.put("status", status.value());

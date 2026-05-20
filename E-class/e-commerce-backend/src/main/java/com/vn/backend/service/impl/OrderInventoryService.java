@@ -111,6 +111,60 @@ public class OrderInventoryService {
         order.setInventoryReleasedAt(OffsetDateTime.now());
     }
 
+    /**
+     * Tru ton kho khi admin xac nhan don COD.
+     * Idempotent: inventoryReserved=true → bo qua ngay, khong tru lan 2.
+     * Lock PESSIMISTIC_WRITE tung variant, check stockQuantity truoc khi tru.
+     * Throw InvalidRequestException neu khong du hang — khong doi trang thai don.
+     */
+    @Transactional
+    public void deductStockForCodConfirm(Order order) {
+        if (order == null || Boolean.TRUE.equals(order.getInventoryReserved())) {
+            return;
+        }
+
+        if (order.getItems() == null || order.getItems().isEmpty()) {
+            throw new InvalidRequestException("Đơn hàng phải có ít nhất một sản phẩm");
+        }
+
+        OffsetDateTime now = OffsetDateTime.now();
+
+        for (OrderItem item : order.getItems()) {
+            ProductVariant itemVariant = item.getProductVariant();
+            if (itemVariant == null || itemVariant.getId() == null) {
+                throw new InvalidRequestException("Thiếu biến thể sản phẩm trong đơn hàng");
+            }
+
+            ProductVariant variant = productVariantRepository.findByIdForUpdate(itemVariant.getId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy biến thể sản phẩm"));
+
+            validateVariantCanBeReserved(variant);
+
+            int quantity     = item.getQuantity() == null ? 0 : item.getQuantity();
+            int currentStock = variant.getStockQuantity() == null ? 0 : variant.getStockQuantity();
+
+            if (quantity <= 0) {
+                throw new InvalidRequestException("Số lượng sản phẩm phải lớn hơn 0");
+            }
+
+            if (currentStock < quantity) {
+                String productName = variant.getProduct() != null ? variant.getProduct().getName() : "";
+                throw new InvalidRequestException(
+                        "Sản phẩm " + productName + " - " + variant.getCode()
+                        + " không đủ tồn kho. Cần: " + quantity + ", còn: " + currentStock);
+            }
+
+            variant.setStockQuantity(currentStock - quantity);
+            productVariantRepository.save(variant);
+            createInventoryTransaction(order, variant, quantity, INVENTORY_OUT, "COD_ADMIN_CONFIRMED");
+        }
+
+        order.setInventoryReserved(true);
+        order.setInventoryReservedAt(now);
+        order.setInventoryReleased(false);
+        order.setInventoryReleasedAt(null);
+    }
+
     private void validateVariantCanBeReserved(ProductVariant variant) {
         if (variant == null) {
             throw new InvalidRequestException("Sản phẩm không còn khả dụng");

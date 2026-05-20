@@ -18,15 +18,13 @@ import com.vn.backend.repository.UserProfileRepository;
 import com.vn.backend.repository.UserRepository;
 import com.vn.backend.service.UserService;
 import lombok.RequiredArgsConstructor;
-import org.apache.coyote.BadRequestException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
-
 import org.springframework.http.HttpStatus;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import com.vn.backend.dto.request.UpdateUserStatusRequest;
-
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -42,6 +40,7 @@ public class UserServiceImpl implements UserService {
     private final UserProfileRepository profileRepository;
     private final EmployeeRepository employeeRepository;
     private final RoleRepository roleRepository;
+    private final PasswordEncoder passwordEncoder;
 
     @Override
     public List<UserResponse> getAllUsers() {
@@ -77,7 +76,8 @@ public class UserServiceImpl implements UserService {
         if (userRepository.existsByEmail(req.getEmail()))
             throw new RuntimeException("Email đã tồn tại");
 
-        if (req.getSalary() == null || req.getSalary() < 0)
+        double salary = req.getSalary() != null ? req.getSalary() : 0.0;
+        if (salary < 0)
             throw new RuntimeException("Lương không hợp lệ");
 
         Role role = roleRepository.findById(req.getRoleId())
@@ -91,10 +91,11 @@ public class UserServiceImpl implements UserService {
         profile.setIsActive(true);
 
         profileRepository.save(profile);
+
         User user = new User();
-        user.setUsername(req.getUsername());
-        user.setEmail(req.getEmail());
-        user.setPasswordHash(req.getPassword()); 
+        user.setUsername(req.getUsername().trim());
+        user.setEmail(req.getEmail().trim().toLowerCase());
+        user.setPasswordHash(passwordEncoder.encode(req.getPassword()));
         user.setIsActive(true);
         user.setRole(role);
         user.setUserProfile(profile);
@@ -105,7 +106,7 @@ public class UserServiceImpl implements UserService {
         employee.setUserProfile(profile);
         employee.setCode(generateEmployeeCode());
         employee.setRole(role);
-        employee.setSalary(req.getSalary());
+        employee.setSalary(salary);
         employee.setIsActive(true);
 
         employeeRepository.save(employee);
@@ -162,9 +163,7 @@ public class UserServiceImpl implements UserService {
 
         UserProfile profile = user.getUserProfile();
 
-        Employee employee = employeeRepository
-                .findByUserProfile(profile)
-                .orElseThrow(() -> new RuntimeException("EMPLOYEE_NOT_FOUND"));
+        Optional<Employee> employeeOpt = employeeRepository.findByUserProfile(profile);
 
         if (request.getEmail() != null) {
             if (userRepository.existsByEmail(request.getEmail())
@@ -182,7 +181,7 @@ public class UserServiceImpl implements UserService {
                     .orElseThrow(() -> new RuntimeException("ROLE_NOT_FOUND"));
 
             user.setRole(role);
-            employee.setRole(role); 
+            employeeOpt.ifPresent(emp -> emp.setRole(role));
         }
 
         if (request.getFullName() != null) {
@@ -206,12 +205,11 @@ public class UserServiceImpl implements UserService {
             profile.setBirthday(request.getBirthday());
         }
 
-
         if (request.getSalary() != null) {
             if (request.getSalary() < 0)
                 throw new RuntimeException("Lương không hợp lệ");
 
-            employee.setSalary(request.getSalary());
+            employeeOpt.ifPresent(emp -> emp.setSalary(request.getSalary()));
         }
 
         userRepository.save(user);

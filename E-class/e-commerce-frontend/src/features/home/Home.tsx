@@ -37,21 +37,30 @@ const emptyHome: HomeResponse = {
 };
 
 const removeDuplicated = (home: HomeResponse): HomeResponse => {
-  const used = new Set<number>();
+  const sharedUsed = new Set<number>();
   const unique = (items: HomeProduct[]) =>
     items.filter((item) => {
-      if (!item.productId || used.has(item.productId)) {
+      if (!item.productId || sharedUsed.has(item.productId)) {
         return false;
       }
-      used.add(item.productId);
+      sharedUsed.add(item.productId);
       return true;
     });
 
-  return {
-    promotionProducts: unique(home.promotionProducts || []).slice(0, 4),
-    featuredProducts: unique(home.featuredProducts || []).slice(0, 4),
-    bestSellerProducts: unique(home.bestSellerProducts || []).slice(0, 4),
-  };
+  const promotionProducts = unique(home.promotionProducts || []).slice(0, 4);
+  const featuredProducts = unique(home.featuredProducts || []).slice(0, 4);
+
+  // bestSellerProducts được phép trùng với các section khác
+  const bestSellerUsed = new Set<number>();
+  const bestSellerProducts = (home.bestSellerProducts || [])
+    .filter((item) => {
+      if (!item.productId || bestSellerUsed.has(item.productId)) return false;
+      bestSellerUsed.add(item.productId);
+      return true;
+    })
+    .slice(0, 4);
+
+  return { promotionProducts, featuredProducts, bestSellerProducts };
 };
 
 const Home = () => {
