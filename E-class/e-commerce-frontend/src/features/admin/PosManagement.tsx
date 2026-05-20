@@ -1,5 +1,4 @@
 import { CSSProperties, useEffect, useMemo, useRef, useState } from "react";
-
 import {
   Button,
   Card,
@@ -44,12 +43,6 @@ import VoucherSelectorModal, {
   VoucherOption,
 } from "@/components/VoucherSelectorModal";
 import { formatKnownVariantAttributes } from "@/utils/productAttributeLabel";
-
-const formatCurrency = (value?: number) =>
-  new Intl.NumberFormat("vi-VN", {
-    style: "currency",
-    currency: "VND",
-  }).format(value || 0);
 
 const { Title, Text } = Typography;
 
@@ -163,7 +156,7 @@ const hasPosDiscount = (product: PosProductSearchResponse) => {
 };
 
 const isPosProductInStock = (product: PosProductSearchResponse) =>
-  product.inStock ?? (product.stockQuantity ?? 0) > 0;
+  product.inStock ?? ((product.stockQuantity ?? 0) > 0);
 
 const renderPosProductPrice = (product: PosProductSearchResponse) => {
   const originalPrice = product.originalPrice ?? product.sellingPrice ?? 0;
@@ -349,9 +342,7 @@ const PosManagement = () => {
     try {
       setLoadingDiscounts(true);
       const data = await posService.getAvailableDiscounts(orderId);
-      const coupons = (data || []).filter(
-        (item) => item.voucherType === "COUPON",
-      );
+      const coupons = (data || []).filter((item) => item.voucherType === "COUPON");
 
       setAvailableDiscounts(coupons);
 
@@ -374,8 +365,7 @@ const PosManagement = () => {
       setSelectedDiscount(null);
       setManualDiscountSelection(false);
       message.error(
-        error?.response?.data?.message ||
-          "Không tải được danh sách mã giảm giá",
+        error?.response?.data?.message || "Không tải được danh sách mã giảm giá",
       );
     } finally {
       setLoadingDiscounts(false);
@@ -534,10 +524,7 @@ const PosManagement = () => {
     }
 
     const fullName = normalizeTextInput(quickCustomerData.fullName);
-    const phone = normalizeTextInput(quickCustomerData.phone).replace(
-      /\s+/g,
-      "",
-    );
+    const phone = normalizeTextInput(quickCustomerData.phone).replace(/\s+/g, "");
     const address = normalizeTextInput(quickCustomerData.address);
 
     if (!fullName) {
@@ -555,9 +542,7 @@ const PosManagement = () => {
     }
 
     if (!phone || !VIETNAM_PHONE_REGEX.test(phone)) {
-      message.warning(
-        phone ? "Số điện thoại không hợp lệ." : "Vui lòng nhập số điện thoại.",
-      );
+      message.warning(phone ? "Số điện thoại không hợp lệ." : "Vui lòng nhập số điện thoại.");
       return;
     }
 
@@ -634,7 +619,7 @@ const PosManagement = () => {
       ...prev,
       customerPaid: Math.max(
         (selectedOrder?.totalAmount ?? 0) -
-          (discount.estimatedDiscountAmount ?? 0),
+        (discount.estimatedDiscountAmount ?? 0),
         0,
       ),
     }));
@@ -648,9 +633,7 @@ const PosManagement = () => {
       return;
     }
     if (!voucher.eligible) {
-      message.error(
-        voucher.ineligibleReason || "Mã giảm giá không đủ điều kiện áp dụng.",
-      );
+      message.error(voucher.ineligibleReason || "Mã giảm giá không đủ điều kiện áp dụng.");
       return;
     }
     handleSelectDiscount({
@@ -700,7 +683,7 @@ const PosManagement = () => {
         customerPaid: isCashPayment ? checkoutData.customerPaid : 0,
         couponId:
           selectedDiscount?.voucherType === "COUPON"
-            ? (selectedDiscount?.id ?? null)
+            ? selectedDiscount?.id ?? null
             : null,
         note: checkoutData.note,
       };
@@ -900,7 +883,9 @@ const PosManagement = () => {
           onClick={() => handleAddProduct(record)}
           disabled={!isPosProductInStock(record)}
         >
-          {!isPosProductInStock(record) ? "Hết hàng" : "Thêm"}
+          {!isPosProductInStock(record)
+            ? "Hết hàng"
+            : "Thêm"}
         </Button>
       ),
     },
@@ -945,8 +930,7 @@ const PosManagement = () => {
     if (selectedDiscount) {
       if (current?.eligible && current.raw) {
         if (
-          selectedDiscount.estimatedDiscountAmount !==
-          current.estimatedDiscountAmount
+          selectedDiscount.estimatedDiscountAmount !== current.estimatedDiscountAmount
         ) {
           setSelectedDiscount({
             ...(current.raw as PosAvailableDiscountResponse),
@@ -954,10 +938,7 @@ const PosManagement = () => {
           });
           setCheckoutData((prev) => ({
             ...prev,
-            customerPaid: Math.max(
-              subtotal - current.estimatedDiscountAmount,
-              0,
-            ),
+            customerPaid: Math.max(subtotal - current.estimatedDiscountAmount, 0),
           }));
         }
 
@@ -1107,159 +1088,46 @@ const PosManagement = () => {
         <Row gutter={[16, 16]} align="top">
           <Col xs={24} xl={6}>
             <Card
-              style={{
-                ...panelCardStyle,
-                height: "100%",
-                borderRadius: 18,
-                overflow: "hidden",
-              }}
-              bodyStyle={{
-                padding: 12,
-              }}
+              title="Danh sách hóa đơn nháp"
+              style={{ ...panelCardStyle, height: "100%" }}
             >
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  marginBottom: 12,
-                }}
-              >
-                <div>
-                  <div
-                    style={{
-                      fontSize: 17,
-                      fontWeight: 700,
-                      color: "#1f1f1f",
-                    }}
-                  >
-                    Hóa đơn nháp
-                  </div>
-
-                  <Text type="secondary" style={{ fontSize: 12 }}>
-                    {draftOrders.length}/{MAX_DRAFT_POS_ORDERS} hóa đơn
-                  </Text>
-                </div>
-
-                <Tag color="blue" style={{ marginRight: 0, borderRadius: 999 }}>
-                  POS
-                </Tag>
-              </div>
-
               {draftOrders.length === 0 ? (
                 <Empty description="Chưa có hóa đơn nháp" />
               ) : (
-                <div
-                  style={{
-                    maxHeight: 420,
-                    overflowY: "auto",
-                    paddingRight: 4,
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: 8,
-                  }}
-                >
-                  {draftOrders.map((item) => {
+                <List
+                  dataSource={draftOrders}
+                  renderItem={(item) => {
                     const active = selectedOrderId === item.orderId;
 
                     return (
-                      <div
-                        key={item.orderId}
+                      <List.Item
                         onClick={() => setSelectedOrderId(item.orderId)}
-                        style={{
-                          cursor: "pointer",
-                          borderRadius: 12,
-                          padding: "9px 10px",
-                          border: active
-                            ? "1.5px solid #1677ff"
-                            : "1px solid #edf0f5",
-                          background: active ? "#eef7ff" : "#ffffff",
-                          transition: "all 0.2s ease",
-                          boxShadow: active
-                            ? "0 6px 14px rgba(22, 119, 255, 0.12)"
-                            : "0 2px 8px rgba(15, 23, 42, 0.03)",
-                        }}
+                        style={getDraftOrderStyle(active)}
                       >
-                        <div
-                          style={{
-                            display: "flex",
-                            justifyContent: "space-between",
-                            alignItems: "flex-start",
-                            gap: 8,
-                          }}
-                        >
-                          <Text
-                            strong
-                            style={{
-                              fontSize: 13,
-                              lineHeight: 1.3,
-                              maxWidth: 150,
-                            }}
-                            ellipsis
-                          >
-                            {item.orderCode}
-                          </Text>
+                        <div style={{ width: "100%" }}>
+                          <Row justify="space-between" align="middle">
+                            <Text strong>{item.orderCode}</Text>
+                            <Tag color={active ? "processing" : "default"}>
+                              {item.status}
+                            </Tag>
+                          </Row>
 
-                          <Tag
-                            color={active ? "processing" : "default"}
-                            style={{
-                              marginRight: 0,
-                              borderRadius: 999,
-                              fontSize: 10,
-                              padding: "0 6px",
-                              lineHeight: "18px",
-                            }}
-                          >
-                            {item.status || "DRAFT"}
-                          </Tag>
-                        </div>
-
-                        <div style={{ marginTop: 5 }}>
-                          <Text
-                            type="secondary"
-                            style={{
-                              fontSize: 12,
-                            }}
-                            ellipsis
-                          >
-                            Khách: {item.customerName || "Khách lẻ"}
-                          </Text>
-                        </div>
-
-                        <div
-                          style={{
-                            marginTop: 5,
-                            display: "flex",
-                            justifyContent: "space-between",
-                            alignItems: "center",
-                          }}
-                        >
-                          <Text
-                            strong
-                            style={{
-                              color: "#cf1322",
-                              fontSize: 14,
-                            }}
-                          >
-                            {currency(item.finalAmount)} đ
-                          </Text>
-
-                          {active && (
-                            <Text
-                              style={{
-                                fontSize: 11,
-                                color: "#1677ff",
-                                fontWeight: 600,
-                              }}
-                            >
-                              Đang chọn
+                          <div style={{ marginTop: 8 }}>
+                            <Text type="secondary">
+                              Khách: {item.customerName || "Khách lẻ"}
                             </Text>
-                          )}
+                          </div>
+
+                          <div style={{ marginTop: 4 }}>
+                            <Text strong style={{ color: "#cf1322" }}>
+                              {currency(item.finalAmount)} đ
+                            </Text>
+                          </div>
                         </div>
-                      </div>
+                      </List.Item>
                     );
-                  })}
-                </div>
+                  }}
+                />
               )}
             </Card>
           </Col>
@@ -1390,9 +1258,7 @@ const PosManagement = () => {
                         <div
                           onClick={() => {
                             if (!canUseDiscount) {
-                              message.info(
-                                "Vui lòng chọn khách hàng để áp dụng mã giảm giá.",
-                              );
+                              message.info("Vui lòng chọn khách hàng để áp dụng mã giảm giá.");
                               return;
                             }
                             setVoucherPickerOpen(true);
@@ -1460,10 +1326,7 @@ const PosManagement = () => {
                                   </Button>
                                 )}
 
-                                <Button
-                                  type="primary"
-                                  disabled={!canUseDiscount}
-                                >
+                                <Button type="primary" disabled={!canUseDiscount}>
                                   {selectedDiscount
                                     ? "Đổi mã"
                                     : "Chọn mã giảm giá"}

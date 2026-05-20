@@ -12,7 +12,7 @@ import {
 } from "@ant-design/icons";
 import ProLayout, { PageContainer } from "@ant-design/pro-layout";
 import proViVN from "@ant-design/pro-provider/es/locale/vi_VN";
-import { Avatar, Badge, ConfigProvider, Dropdown, Modal, Space } from "antd";
+import { Avatar, Badge, ConfigProvider, Dropdown, Space } from "antd";
 import antdViVN from "antd/locale/vi_VN";
 import { Link, Navigate, Outlet, useLocation, useNavigate } from "react-router-dom";
 import ChatbotWidget from "@/features/chatbot/ChatbotWidget";
@@ -32,21 +32,11 @@ const AdminLayout = () => {
     return <Navigate to="/admin/login" replace state={{ from: location }} />;
   }
 
-const handleLogout = () => {
-  Modal.confirm({
-    title: "Xác nhận đăng xuất",
-    content: "Bạn có chắc chắn muốn đăng xuất khỏi trang quản trị không?",
-    okText: "Đăng xuất",
-    cancelText: "Hủy",
-    okButtonProps: {
-      danger: true,
-    },
-    onOk: () => {
-      logout();
-      navigate("/admin/login", { replace: true });
-    },
-  });
-};
+  const handleLogout = () => {
+    logout();
+    navigate("/admin/login");
+  };
+
   const userMenuItems = [
     {
       key: "logout",

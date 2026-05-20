@@ -39,15 +39,11 @@ const NO_IMAGE_PLACEHOLDER =
 const formatMoney = (value?: number | string) =>
   `${Number(value || 0).toLocaleString("vi-VN")} ₫`;
 
-const getVariantAttribute = (
-  variant: Variant | null | undefined,
-  code: string,
-) => {
+const getVariantAttribute = (variant: Variant | null | undefined, code: string) => {
   if (!variant) return null;
 
   const attrs = variant.attributes || {};
-  const direct =
-    attrs[code] ?? attrs[code.toUpperCase()] ?? attrs[code.toLowerCase()];
+  const direct = attrs[code] ?? attrs[code.toUpperCase()] ?? attrs[code.toLowerCase()];
 
   if (direct != null && String(direct).trim()) {
     return String(direct);
@@ -147,29 +143,36 @@ const ProductDetailPage = () => {
     );
   }, [product]);
 
-  const { allSizes, allColors, allMaterials } = useMemo(() => {
-    if (!product) {
-      return {
-        allSizes: [],
-        allColors: [],
-        allMaterials: [],
-      };
-    }
+  const { allSizes, allColors, allMaterials } =
+    useMemo(() => {
+      if (!product) {
+        return {
+          allSizes: [],
+          allColors: [],
+          allMaterials: [],
+        };
+      }
 
-    const allSizes = [
-      ...new Set(sellableVariants.map(getVariantSize).filter(Boolean)),
-    ] as string[];
+      const allSizes = [
+        ...new Set(
+          sellableVariants.map(getVariantSize).filter(Boolean),
+        ),
+      ] as string[];
 
-    const allColors = [
-      ...new Set(sellableVariants.map(getVariantColor).filter(Boolean)),
-    ] as string[];
+      const allColors = [
+        ...new Set(
+          sellableVariants.map(getVariantColor).filter(Boolean),
+        ),
+      ] as string[];
 
-    const allMaterials = [
-      ...new Set(sellableVariants.map(getVariantMaterial).filter(Boolean)),
-    ] as string[];
+      const allMaterials = [
+        ...new Set(
+          sellableVariants.map(getVariantMaterial).filter(Boolean),
+        ),
+      ] as string[];
 
-    return { allSizes, allColors, allMaterials };
-  }, [product, sellableVariants]);
+      return { allSizes, allColors, allMaterials };
+    }, [product, sellableVariants]);
 
   const hasMaterialOptions = allMaterials.length > 0;
 
@@ -180,11 +183,7 @@ const ProductDetailPage = () => {
     !selectedColor || getVariantColor(variant) === selectedColor;
 
   const selectedVariant = useMemo(() => {
-    if (
-      !selectedSize ||
-      !selectedColor ||
-      (hasMaterialOptions && !selectedMaterial)
-    ) {
+    if (!selectedSize || !selectedColor || (hasMaterialOptions && !selectedMaterial)) {
       return null;
     }
 
@@ -196,13 +195,7 @@ const ProductDetailPage = () => {
           (!hasMaterialOptions || getVariantMaterial(v) === selectedMaterial),
       ) || null
     );
-  }, [
-    sellableVariants,
-    selectedSize,
-    selectedColor,
-    selectedMaterial,
-    hasMaterialOptions,
-  ]);
+  }, [sellableVariants, selectedSize, selectedColor, selectedMaterial, hasMaterialOptions]);
 
   useEffect(() => {
     if (!selectedMaterial) return;
@@ -270,8 +263,7 @@ const ProductDetailPage = () => {
   //
   const isSizeDisabled = (size: string) => {
     return !sellableVariants.some(
-      (variant) =>
-        getVariantSize(variant) === size && getVariantStock(variant) > 0,
+      (variant) => getVariantSize(variant) === size && getVariantStock(variant) > 0,
     );
   };
 
@@ -294,10 +286,7 @@ const ProductDetailPage = () => {
   };
   //
 
-  const handleSelectAttribute = (
-    type: "size" | "color" | "material",
-    value: string,
-  ) => {
+  const handleSelectAttribute = (type: "size" | "color" | "material", value: string) => {
     if (type === "size") {
       setSelectedSize((prev) => (prev === value ? null : value));
     } else if (type === "color") {
@@ -310,26 +299,6 @@ const ProductDetailPage = () => {
 
   const handleAddToCart = async () => {
     if (addingToCart || addingToCartRef.current) {
-      return;
-    }
-
-    if (!isAuthenticated) {
-      Modal.confirm({
-        title: "Bạn cần đăng nhập",
-        content: "Vui lòng đăng nhập để thêm sản phẩm vào giỏ hàng.",
-        okText: "Đăng nhập",
-        cancelText: "Ở lại",
-        centered: true,
-        onOk: () => {
-          navigate("/login", {
-            replace: false,
-            state: {
-              from: window.location.pathname + window.location.search,
-            },
-          });
-        },
-      });
-
       return;
     }
 
@@ -353,9 +322,7 @@ const ProductDetailPage = () => {
     }
 
     if (quantity > getVariantStock(selectedVariant)) {
-      message.warning(
-        "Số lượng không được vượt quá tồn kho của biến thể đã chọn",
-      );
+      message.warning("Số lượng không được vượt quá tồn kho của biến thể đã chọn");
       return;
     }
 
@@ -364,7 +331,6 @@ const ProductDetailPage = () => {
       content: `Bạn có muốn thêm ${quantity} sản phẩm vào giỏ hàng không?`,
       okText: "Thêm",
       cancelText: "Hủy",
-      centered: true,
       onOk: async () => {
         if (addingToCartRef.current) {
           return;
@@ -373,7 +339,6 @@ const ProductDetailPage = () => {
         try {
           addingToCartRef.current = true;
           setAddingToCart(true);
-
           await cartService.addToCart({
             productVariantId: selectedVariant.id,
             quantity,
@@ -382,23 +347,6 @@ const ProductDetailPage = () => {
           message.success("Đã thêm vào giỏ hàng.");
           fetchOrderCount();
         } catch (error: any) {
-          if (
-            error?.response?.status === 401 ||
-            error?.response?.status === 403
-          ) {
-            Modal.confirm({
-              title: "Phiên đăng nhập không hợp lệ",
-              content: "Vui lòng đăng nhập lại để thêm sản phẩm vào giỏ hàng.",
-              okText: "Đăng nhập",
-              cancelText: "Ở lại",
-              centered: true,
-              onOk: () => {
-                navigate("/login");
-              },
-            });
-            return;
-          }
-
           message.error(
             error?.response?.data?.message ||
               "Thêm vào giỏ hàng thất bại. Vui lòng thử lại.",
@@ -441,11 +389,7 @@ const ProductDetailPage = () => {
           Quay lại
         </Button>
 
-        <Row
-          gutter={[28, 28]}
-          className="product-detail-shell"
-          style={{ padding: 24 }}
-        >
+        <Row gutter={[28, 28]} className="product-detail-shell" style={{ padding: 24 }}>
           <Col xs={24} md={12}>
             <div
               style={{
@@ -522,21 +466,13 @@ const ProductDetailPage = () => {
           </Col>
 
           <Col xs={24} md={12}>
-            <Title
-              level={2}
-              style={{ fontWeight: 800, fontSize: 28, marginTop: 0 }}
-            >
+            <Title level={2} style={{ fontWeight: 800, fontSize: 28, marginTop: 0 }}>
               {product.name}
             </Title>
 
             <Title
               level={3}
-              style={{
-                color: "#e11d2e",
-                marginTop: 12,
-                marginBottom: 0,
-                fontWeight: 800,
-              }}
+              style={{ color: "#e11d2e", marginTop: 12, marginBottom: 0, fontWeight: 800 }}
             >
               {selectedVariant ? (
                 <Space direction="vertical" size={2}>
@@ -549,21 +485,11 @@ const ProductDetailPage = () => {
                   </span>
                   {selectedVariant.isSale &&
                     Number(selectedVariant.discountPercent || 0) > 0 &&
-                    Number(
-                      selectedVariant.originalPrice ??
-                        selectedVariant.sellingPrice,
-                    ) >
-                      Number(
-                        selectedVariant.salePrice ??
-                          selectedVariant.unitPrice ??
-                          selectedVariant.sellingPrice,
-                      ) && (
+                    Number(selectedVariant.originalPrice ?? selectedVariant.sellingPrice) >
+                      Number(selectedVariant.salePrice ?? selectedVariant.unitPrice ?? selectedVariant.sellingPrice) && (
                       <Space size={8}>
                         <Text delete type="secondary" style={{ fontSize: 16 }}>
-                          {formatMoney(
-                            selectedVariant.originalPrice ??
-                              selectedVariant.sellingPrice,
-                          )}
+                          {formatMoney(selectedVariant.originalPrice ?? selectedVariant.sellingPrice)}
                         </Text>
                         <Tag color="red">
                           -{Number(selectedVariant.discountPercent).toFixed(0)}%
@@ -571,10 +497,10 @@ const ProductDetailPage = () => {
                       </Space>
                     )}
                 </Space>
-              ) : hasMaterialOptions ? (
-                "Chọn kích cỡ, màu sắc và chất liệu để xem giá"
               ) : (
-                "Chọn kích cỡ và màu sắc để xem giá"
+                hasMaterialOptions
+                  ? "Chọn kích cỡ, màu sắc và chất liệu để xem giá"
+                  : "Chọn kích cỡ và màu sắc để xem giá"
               )}
             </Title>
 
@@ -583,13 +509,15 @@ const ProductDetailPage = () => {
               <Tag color="purple">{product.categoryName}</Tag>
             </Space>
 
-            {!hasCompleteSelection && (
-              <div style={{ marginTop: 8 }}>
-                <Text type="secondary">{selectionHint}</Text>
-              </div>
-            )}
+              {!hasCompleteSelection && (
+                <div style={{ marginTop: 8 }}>
+                  <Text type="secondary">
+                    {selectionHint}
+                  </Text>
+                </div>
+              )}
 
-            {hasCompleteSelection && selectedVariant && (
+              {hasCompleteSelection && selectedVariant && (
               <>
                 <div style={{ marginTop: 8 }}>
                   <Text>Tồn kho: {selectedStock}</Text>
@@ -657,12 +585,8 @@ const ProductDetailPage = () => {
                   {allMaterials.map((material) => (
                     <Button
                       key={material}
-                      type={
-                        selectedMaterial === material ? "primary" : "default"
-                      }
-                      onClick={() =>
-                        handleSelectAttribute("material", material)
-                      }
+                      type={selectedMaterial === material ? "primary" : "default"}
+                      onClick={() => handleSelectAttribute("material", material)}
                       disabled={isMaterialDisabled(material)}
                       style={{
                         whiteSpace: "normal",
@@ -726,23 +650,13 @@ const ProductDetailPage = () => {
 
             <Row gutter={[12, 12]}>
               {[
-                [
-                  <TruckOutlined />,
-                  "Vận chuyển nhanh",
-                  "Vận chuyển 63 tỉnh thành",
-                ],
+                [<TruckOutlined />, "Vận chuyển nhanh", "Vận chuyển 63 tỉnh thành"],
                 [<SyncOutlined />, "Bảo hành sản phẩm", "Lỗi 1 đổi 1"],
-                [
-                  <SafetyOutlined />,
-                  "Thanh toán an toàn",
-                  "Hỗ trợ nhiều hình thức",
-                ],
+                [<SafetyOutlined />, "Thanh toán an toàn", "Hỗ trợ nhiều hình thức"],
               ].map(([icon, title, desc]) => (
                 <Col xs={24} sm={8} key={String(title)}>
                   <Space align="center">
-                    <span style={{ color: "#0f73ff", fontSize: 24 }}>
-                      {icon}
-                    </span>
+                    <span style={{ color: "#0f73ff", fontSize: 24 }}>{icon}</span>
                     <span>
                       <Text strong style={{ display: "block", fontSize: 13 }}>
                         {title}
@@ -755,6 +669,7 @@ const ProductDetailPage = () => {
                 </Col>
               ))}
             </Row>
+
           </Col>
         </Row>
 

@@ -31,6 +31,7 @@ const { Header, Sider, Content } = Layout;
 const { Title, Text } = Typography;
 
 const UserManagementPage = () => {
+
   const [users, setUsers] = useState<User[]>([]);
   const [roles, setRoles] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -51,13 +52,7 @@ const UserManagementPage = () => {
 
   const [form] = Form.useForm();
 
-  const selectedRoleId = Form.useWatch("roleId", form);
 
-  const selectedRole = roles.find((r) => r.id === selectedRoleId);
-
-  const isCustomerRole =
-    selectedRole?.code === "CUSTOMER" ||
-    selectedRole?.name?.toLowerCase().includes("khách");
   const fetchRoles = async () => {
     try {
       const res = await userService.getRoles();
@@ -93,10 +88,12 @@ const UserManagementPage = () => {
     }, 350);
 
     return () => clearTimeout(timer);
+
   }, [searchText]);
 
   useEffect(() => {
     fetchUsers(searchText?.trim() ? searchText.trim() : undefined);
+
   }, [page, size]);
 
   const filteredUsers = useMemo(() => {
@@ -188,8 +185,9 @@ const UserManagementPage = () => {
           address: values.address,
           birthday: normalizeBirthday(values.birthday),
           roleId: values.roleId,
-          salary: isCustomerRole ? null : Number(values.salary ?? 0),
+          salary: values.salary,
         };
+
         await userService.updateUser(editingUser.id, updatePayload);
         message.success("Cập nhật thành công");
       } else {
@@ -507,23 +505,21 @@ const UserManagementPage = () => {
                 </Select>
               </Form.Item>
 
-              {!isCustomerRole && (
-                <Form.Item
-                  name="salary"
-                  label="Lương"
-                  rules={[
-                    { required: true, message: "Không được để trống" },
-                    {
-                      validator: (_, value) =>
-                        Number(value) >= 0
-                          ? Promise.resolve()
-                          : Promise.reject(new Error("Lương phải >= 0")),
-                    },
-                  ]}
-                >
-                  <Input type="number" min={0} />
-                </Form.Item>
-              )}
+              <Form.Item
+                name="salary"
+                label="Lương"
+                rules={[
+                  { required: true, message: "Không được để trống" },
+                  {
+                    validator: (_, value) =>
+                      value >= 0
+                        ? Promise.resolve()
+                        : Promise.reject(new Error("Lương phải >= 0")),
+                  },
+                ]}
+              >
+                <Input type="number" min={0} />
+              </Form.Item>
             </Form>
           </Modal>
 

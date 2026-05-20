@@ -1,10 +1,11 @@
 package com.vn.backend.service.impl;
 
+
 import com.vn.backend.dto.request.UpdateUserRequest;
-import com.vn.backend.dto.request.UpdateUserStatusRequest;
 import com.vn.backend.dto.request.UserCreateRequest;
 import com.vn.backend.dto.response.PageResponse;
 import com.vn.backend.dto.response.UserDetailResponse;
+import com.vn.backend.dto.response.UserListResponse;
 import com.vn.backend.dto.response.UserResponse;
 import com.vn.backend.entity.Employee;
 import com.vn.backend.entity.Role;
@@ -17,12 +18,15 @@ import com.vn.backend.repository.UserProfileRepository;
 import com.vn.backend.repository.UserRepository;
 import com.vn.backend.service.UserService;
 import lombok.RequiredArgsConstructor;
+import org.apache.coyote.BadRequestException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+
 import org.springframework.http.HttpStatus;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import com.vn.backend.dto.request.UpdateUserStatusRequest;
+
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -34,13 +38,10 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class UserServiceImpl implements UserService {
 
-    private static final String ROLE_CUSTOMER = "CUSTOMER";
-
     private final UserRepository userRepository;
     private final UserProfileRepository profileRepository;
     private final EmployeeRepository employeeRepository;
     private final RoleRepository roleRepository;
-    private final PasswordEncoder passwordEncoder;
 
     @Override
     public List<UserResponse> getAllUsers() {
@@ -67,29 +68,20 @@ public class UserServiceImpl implements UserService {
     @Override
     public void createUser(UserCreateRequest req) {
 
-        if (req.getPhone() != null && profileRepository.existsByPhone(req.getPhone())) {
+        if (profileRepository.existsByPhone(req.getPhone()))
             throw new RuntimeException("Số điện thoại đã tồn tại");
-        }
 
-        if (userRepository.existsByUsername(req.getUsername())) {
+        if (userRepository.existsByUsername(req.getUsername()))
             throw new RuntimeException("Username đã tồn tại");
-        }
 
-        if (userRepository.existsByEmail(req.getEmail())) {
+        if (userRepository.existsByEmail(req.getEmail()))
             throw new RuntimeException("Email đã tồn tại");
-        }
+
+        if (req.getSalary() == null || req.getSalary() < 0)
+            throw new RuntimeException("Lương không hợp lệ");
 
         Role role = roleRepository.findById(req.getRoleId())
-                .orElseThrow(() -> new RuntimeException("ROLE_NOT_FOUND"));
-
-        boolean isCustomerRole = role.getCode() != null
-                && ROLE_CUSTOMER.equalsIgnoreCase(role.getCode());
-
-        if (!isCustomerRole) {
-            if (req.getSalary() == null || req.getSalary() < 0) {
-                throw new RuntimeException("Lương không hợp lệ");
-            }
-        }
+                .orElseThrow(() -> new RuntimeException("Role không tồn tại"));
 
         UserProfile profile = new UserProfile();
         profile.setFullName(req.getFullName());
@@ -99,28 +91,28 @@ public class UserServiceImpl implements UserService {
         profile.setIsActive(true);
 
         profileRepository.save(profile);
-
         User user = new User();
         user.setUsername(req.getUsername());
         user.setEmail(req.getEmail());
-        user.setPasswordHash(passwordEncoder.encode(req.getPassword()));
+        user.setPasswordHash(req.getPassword()); 
         user.setIsActive(true);
         user.setRole(role);
         user.setUserProfile(profile);
 
         userRepository.save(user);
 
-        if (!isCustomerRole) {
-            Employee employee = new Employee();
-            employee.setUserProfile(profile);
-            employee.setCode(generateEmployeeCode());
-            employee.setRole(role);
-            employee.setSalary(req.getSalary());
-            employee.setIsActive(true);
+        Employee employee = new Employee();
+        employee.setUserProfile(profile);
+        employee.setCode(generateEmployeeCode());
+        employee.setRole(role);
+        employee.setSalary(req.getSalary());
+        employee.setIsActive(true);
 
-            employeeRepository.save(employee);
-        }
+        employeeRepository.save(employee);
     }
+
+
+
 
     @Override
     public void updateStatus(Long id, UpdateUserStatusRequest request) {
@@ -129,19 +121,9 @@ public class UserServiceImpl implements UserService {
                 .orElseThrow(() -> new RuntimeException("USER_NOT_FOUND"));
 
         user.setIsActive(request.getIsActive());
-
-        if (user.getUserProfile() != null) {
-            Optional<Employee> employeeOpt =
-                    employeeRepository.findByUserProfile(user.getUserProfile());
-
-            employeeOpt.ifPresent(employee -> {
-                employee.setIsActive(request.getIsActive());
-                employeeRepository.save(employee);
-            });
-        }
-
         userRepository.save(user);
     }
+
 
     @Transactional
     @Override
@@ -180,35 +162,27 @@ public class UserServiceImpl implements UserService {
 
         UserProfile profile = user.getUserProfile();
 
-        if (profile == null) {
-            throw new RuntimeException("USER_PROFILE_NOT_FOUND");
-        }
-
         Employee employee = employeeRepository
                 .findByUserProfile(profile)
-                .orElse(null);
+                .orElseThrow(() -> new RuntimeException("EMPLOYEE_NOT_FOUND"));
 
         if (request.getEmail() != null) {
-            String email = request.getEmail().trim().toLowerCase();
-
-            if (userRepository.existsByEmail(email)
-                    && !email.equalsIgnoreCase(user.getEmail())) {
+            if (userRepository.existsByEmail(request.getEmail())
+                    && !user.getEmail().equals(request.getEmail())) {
                 throw new ResponseStatusException(
                         HttpStatus.BAD_REQUEST,
                         "Email đã tồn tại"
                 );
             }
-
-            user.setEmail(email);
+            user.setEmail(request.getEmail());
         }
 
-        Role selectedRole = user.getRole();
-
         if (request.getRoleId() != null) {
-            selectedRole = roleRepository.findById(request.getRoleId())
+            Role role = roleRepository.findById(request.getRoleId())
                     .orElseThrow(() -> new RuntimeException("ROLE_NOT_FOUND"));
 
-            user.setRole(selectedRole);
+            user.setRole(role);
+            employee.setRole(role); 
         }
 
         if (request.getFullName() != null) {
@@ -216,14 +190,12 @@ public class UserServiceImpl implements UserService {
         }
 
         if (request.getPhone() != null) {
-            String phone = request.getPhone().trim();
-
-            if (profileRepository.existsByPhone(phone)
-                    && !phone.equals(profile.getPhone())) {
+            if (profileRepository.existsByPhone(request.getPhone())
+                    && !request.getPhone().equals(profile.getPhone())) {
                 throw new RuntimeException("Số điện thoại đã tồn tại");
             }
 
-            profile.setPhone(phone);
+            profile.setPhone(request.getPhone());
         }
 
         if (request.getAddress() != null) {
@@ -234,40 +206,14 @@ public class UserServiceImpl implements UserService {
             profile.setBirthday(request.getBirthday());
         }
 
-        boolean isCustomerRole = selectedRole != null
-                && selectedRole.getCode() != null
-                && ROLE_CUSTOMER.equalsIgnoreCase(selectedRole.getCode());
-
-        if (isCustomerRole) {
-            if (employee != null) {
-                employee.setIsActive(false);
-                employeeRepository.save(employee);
-            }
-
-            userRepository.save(user);
-            return;
-        }
-
-        if (employee == null) {
-            employee = new Employee();
-            employee.setUserProfile(profile);
-            employee.setCode(generateEmployeeCode());
-            employee.setIsActive(Boolean.TRUE.equals(user.getIsActive()));
-        }
-
-        employee.setRole(selectedRole);
 
         if (request.getSalary() != null) {
-            if (request.getSalary() < 0) {
+            if (request.getSalary() < 0)
                 throw new RuntimeException("Lương không hợp lệ");
-            }
 
             employee.setSalary(request.getSalary());
-        } else if (employee.getSalary() == null) {
-            employee.setSalary(0D);
         }
 
-        employeeRepository.save(employee);
         userRepository.save(user);
     }
 
@@ -276,15 +222,6 @@ public class UserServiceImpl implements UserService {
 
         User user = userRepository.findDetailById(id)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy người dùng."));
-
-        UserProfile profile = user.getUserProfile();
-
-        Employee employee = null;
-
-        if (profile != null) {
-            employee = employeeRepository.findByUserProfile(profile)
-                    .orElse(null);
-        }
 
         UserDetailResponse res = new UserDetailResponse();
 
@@ -295,22 +232,9 @@ public class UserServiceImpl implements UserService {
 
         if (user.getRole() != null) {
             res.setRoleId(user.getRole().getId());
-            res.setRoleCode(user.getRole().getCode());
-            res.setRoleName(user.getRole().getName());
         }
 
-        res.setUserProfile(profile);
-
-        if (profile != null) {
-            res.setFullName(profile.getFullName());
-            res.setPhone(profile.getPhone());
-            res.setAddress(profile.getAddress());
-            res.setBirthday(profile.getBirthday());
-        }
-
-        if (employee != null) {
-            res.setSalary(employee.getSalary());
-        }
+        res.setUserProfile(user.getUserProfile());
 
         return res;
     }
@@ -324,11 +248,6 @@ public class UserServiceImpl implements UserService {
 
         Employee lastEmployee = lastEmployeeOpt.get();
         String lastCode = lastEmployee.getCode();
-
-        if (lastCode == null || !lastCode.startsWith("NV")) {
-            return "NV00001";
-        }
-
         int number = Integer.parseInt(lastCode.substring(2));
         number++;
 

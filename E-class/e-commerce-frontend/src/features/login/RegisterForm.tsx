@@ -1,14 +1,17 @@
 import { useState } from "react";
-import { LockOutlined, MailOutlined, UserOutlined } from "@ant-design/icons";
-import { Button, Form, Input, Modal, Typography, message } from "antd";
-import { useNavigate } from "react-router-dom";
+import {
+  LockOutlined,
+  MailOutlined,
+  PhoneOutlined,
+  UserOutlined,
+} from "@ant-design/icons";
+import { Button, Form, Input, Typography, message } from "antd";
 import { axiosClient } from "@/services/axiosClient";
 
 const { Title } = Typography;
 
 const RegisterForm = () => {
   const [form] = Form.useForm();
-  const navigate = useNavigate();
   const [submitting, setSubmitting] = useState(false);
 
   const onFinish = async (values: any) => {
@@ -19,25 +22,16 @@ const RegisterForm = () => {
         fullName: values.fullName,
         username: values.username,
         email: values.email,
+        phone: values.phone,
+        address: values.address,
         password: values.password,
       });
 
+      message.success("Đăng ký thành công! Bạn có thể đăng nhập ngay.");
       form.resetFields();
-
-      Modal.success({
-        title: "Đăng ký thành công",
-        content: "Tài khoản của bạn đã được tạo thành công. Bấm đăng nhập để tiếp tục.",
-        okText: "Đăng nhập",
-        centered: true,
-        onOk: () => {
-          navigate("/login", { replace: true });
-        },
-      });
     } catch (error: any) {
       message.error(
-        error?.response?.data?.message ||
-          error?.response?.data ||
-          "Đăng ký thất bại, vui lòng thử lại."
+        error?.response?.data?.message || "Đăng ký thất bại, vui lòng thử lại.",
       );
     } finally {
       setSubmitting(false);
@@ -82,6 +76,18 @@ const RegisterForm = () => {
         </Form.Item>
 
         <Form.Item
+          label="Số điện thoại"
+          name="phone"
+          rules={[{ required: true, message: "Vui lòng nhập số điện thoại!" }]}
+        >
+          <Input prefix={<PhoneOutlined />} placeholder="Nhập số điện thoại" />
+        </Form.Item>
+
+        <Form.Item label="Địa chỉ" name="address">
+          <Input placeholder="Nhập địa chỉ" />
+        </Form.Item>
+
+        <Form.Item
           label="Mật khẩu"
           name="password"
           rules={[
@@ -106,7 +112,6 @@ const RegisterForm = () => {
                 if (!value || getFieldValue("password") === value) {
                   return Promise.resolve();
                 }
-
                 return Promise.reject(new Error("Hai mật khẩu không khớp!"));
               },
             }),
