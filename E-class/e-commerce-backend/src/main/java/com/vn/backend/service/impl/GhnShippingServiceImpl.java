@@ -68,16 +68,6 @@ public class GhnShippingServiceImpl implements GhnShippingService {
             throw new InvalidRequestException("Vui lòng chọn đầy đủ quận/huyện và phường/xã để tính phí vận chuyển.");
         }
 
-        int totalQuantity = items == null
-                ? 0
-                : items.stream()
-                .map(OrderItemRequest::getQuantity)
-                .filter(quantity -> quantity != null && quantity > 0)
-                .mapToInt(Integer::intValue)
-                .sum();
-
-        int totalWeight = Math.max(totalQuantity * defaultWeightPerShoe, defaultWeightPerShoe);
-        int height = Math.min(30, defaultHeight + Math.max(totalQuantity, 1) * 2);
         int serviceId = resolveServiceId(toDistrictId);
 
         Map<String, Object> body = new HashMap<>();
@@ -88,9 +78,9 @@ public class GhnShippingServiceImpl implements GhnShippingService {
         body.put("to_ward_code", toWardCode);
         body.put("length", defaultLength);
         body.put("width", defaultWidth);
-        body.put("height", height);
-        body.put("weight", totalWeight);
-        body.put("insurance_value", defaultZero(insuranceValue).intValue());
+        body.put("height", defaultHeight);
+        body.put("weight", defaultWeightPerShoe);
+        body.put("insurance_value", 0);
         body.put("coupon", null);
 
         try {

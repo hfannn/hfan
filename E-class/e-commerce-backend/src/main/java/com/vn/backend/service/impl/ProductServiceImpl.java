@@ -7,6 +7,7 @@ import com.vn.backend.dto.response.ProductDetailResponse;
 import com.vn.backend.dto.response.ProductListResponse;
 import com.vn.backend.dto.response.ProductPriceResponse;
 import com.vn.backend.dto.response.ProductVariantResponse;
+import com.vn.backend.entity.AttributeValue;
 import com.vn.backend.entity.Brand;
 import com.vn.backend.entity.Category;
 import com.vn.backend.entity.Origin;
@@ -15,6 +16,7 @@ import com.vn.backend.entity.ProductImage;
 import com.vn.backend.entity.ProductVariant;
 import com.vn.backend.entity.Supplier;
 import com.vn.backend.mapper.PageMapper;
+import com.vn.backend.repository.AttributeValueRepository;
 import com.vn.backend.repository.BrandRepository;
 import com.vn.backend.repository.CategoryRepository;
 import com.vn.backend.repository.OriginRepository;
@@ -57,6 +59,7 @@ public class ProductServiceImpl implements ProductService {
     private final FileStorageService fileStorageService;
     private final SupplierRepository supplierRepository;
     private final ProductPriceService productPriceService;
+    private final AttributeValueRepository attributeValueRepository;
 
     @Override
     @Transactional
@@ -86,6 +89,12 @@ public class ProductServiceImpl implements ProductService {
         product.setIsActive(request.getIsActive() != null ? request.getIsActive() : true);
         product.setDeletedAt(null);
 
+        if (request.getMaterialId() != null) {
+            AttributeValue material = attributeValueRepository.findById(request.getMaterialId())
+                    .orElseThrow(() -> new RuntimeException("Khong tim thay chat lieu"));
+            product.setMaterial(material);
+        }
+
         return productRepository.save(product);
     }
 
@@ -114,6 +123,14 @@ public class ProductServiceImpl implements ProductService {
         product.setOrigin(origin);
         product.setSupplier(supplier);
         product.setIsActive(request.getIsActive() != null ? request.getIsActive() : true);
+
+        if (request.getMaterialId() != null) {
+            AttributeValue material = attributeValueRepository.findById(request.getMaterialId())
+                    .orElseThrow(() -> new RuntimeException("Khong tim thay chat lieu"));
+            product.setMaterial(material);
+        } else {
+            product.setMaterial(null);
+        }
 
         if (StringUtils.hasText(request.getCode())) {
             String normalizedCode = normalizeCode(request.getCode());
@@ -243,6 +260,9 @@ public class ProductServiceImpl implements ProductService {
                 p.getSupplier() != null ? p.getSupplier().getId() : null,
                 p.getSupplier() != null ? p.getSupplier().getName() : null,
 
+                p.getMaterial() != null ? p.getMaterial().getId() : null,
+                p.getMaterial() != null ? p.getMaterial().getValue() : null,
+
                 p.getIsActive(),
                 p.getDeletedAt(),
                 variants,
@@ -279,6 +299,12 @@ public class ProductServiceImpl implements ProductService {
         product.setSupplier(supplier);
         product.setIsActive(request.getIsActive() != null ? request.getIsActive() : true);
         product.setDeletedAt(null);
+
+        if (request.getMaterialId() != null) {
+            AttributeValue material = attributeValueRepository.findById(request.getMaterialId())
+                    .orElseThrow(() -> new RuntimeException("Khong tim thay chat lieu"));
+            product.setMaterial(material);
+        }
 
         product = productRepository.save(product);
 

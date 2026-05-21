@@ -39,6 +39,11 @@ import {
   Tooltip,
   Legend,
   ResponsiveContainer,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
 } from "recharts";
 
 const { Title, Text } = Typography;
@@ -414,6 +419,40 @@ const DashboardPage = () => {
     );
   };
 
+  const renderRevenueBarChart = (
+    data: { name: string; value: number }[],
+    emptyText: string,
+  ) => {
+    if (!data.length) {
+      return <Empty description={emptyText} />;
+    }
+
+    const yTickFormatter = (value: number) => {
+      if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(0)}tr`;
+      if (value >= 1_000) return `${(value / 1_000).toFixed(0)}k`;
+      return String(value);
+    };
+
+    return (
+      <div style={{ width: "100%", height: 320 }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={data} margin={{ top: 8, right: 16, left: 8, bottom: 8 }}>
+            <CartesianGrid strokeDasharray="3 3" vertical={false} />
+            <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+            <YAxis tickFormatter={yTickFormatter} tick={{ fontSize: 12 }} width={56} />
+            <Tooltip
+              formatter={(value: any) => [
+                formatCurrency(Number(value || 0)),
+                "Doanh thu",
+              ]}
+            />
+            <Bar dataKey="value" fill="#1677ff" radius={[4, 4, 0, 0]} maxBarSize={48} />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+    );
+  };
+
   const cashRevenue = useMemo(
     () =>
       paymentMethodData
@@ -685,10 +724,9 @@ const DashboardPage = () => {
         <Row gutter={[16, 16]} style={{ marginTop: 8 }}>
           <Col xs={24} xl={14}>
             <Card title="Tỷ trọng doanh thu">
-              {renderPieChart(
+              {renderRevenueBarChart(
                 revenuePieData,
                 "Không có dữ liệu tỷ trọng doanh thu",
-                formatCurrency,
               )}
             </Card>
           </Col>

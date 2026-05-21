@@ -38,6 +38,7 @@ interface CartItem {
   size?: string | null;
   color?: string | null;
   material?: string | null;
+  materialName?: string | null;
   price: number;
   originalPrice: number;
   unitPrice: number;
@@ -80,7 +81,8 @@ const CartPage = () => {
       sku: String(item.variantCode || "-"),
       size: item.size,
       color: item.color,
-      material: item.material,
+      material: item.materialName ?? item.material ?? null,
+      materialName: item.materialName ?? item.material ?? null,
       price: Number(item.unitPrice ?? item.salePrice ?? item.price ?? 0),
       originalPrice: Number(item.originalPrice ?? item.price ?? 0),
       unitPrice: Number(item.unitPrice ?? item.salePrice ?? item.price ?? 0),
@@ -301,7 +303,7 @@ const CartPage = () => {
               </span>
             </div>
             <div className="cart-variant-line">
-              {getProductAttributeLabel("MATERIAL")}: <strong>{record.material || "-"}</strong>
+              {getProductAttributeLabel("MATERIAL")}: <strong>{record.materialName || record.material || "Chưa cập nhật"}</strong>
             </div>
 
           </Space>

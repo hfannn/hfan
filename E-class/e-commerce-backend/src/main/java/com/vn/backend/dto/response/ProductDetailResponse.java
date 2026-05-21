@@ -29,6 +29,9 @@ public class ProductDetailResponse {
     private Long supplierId;
     private String supplierName;
 
+    private Long materialId;
+    private String materialName;
+
     private Boolean isActive;
     private OffsetDateTime deletedAt;
 

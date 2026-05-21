@@ -48,8 +48,6 @@ interface VariantItem {
   color_name: string;
   size_id: number;
   size_name: string;
-  material_id: number;
-  material_name: string;
   cost_price: number | null;
   selling_price: number | null;
   stock_quantity: number;
@@ -92,8 +90,6 @@ const AddProductForm = ({ onFinish, onCancel }: AddProductFormProps) => {
 
   const selectedColorIds = Form.useWatch("selected_color_ids", form) || [];
   const selectedSizeIds = Form.useWatch("selected_size_ids", form) || [];
-  const selectedMaterialIds =
-    Form.useWatch("selected_material_ids", form) || [];
 
   const productName = Form.useWatch("name", form) || "";
   const codeSuffixRef = useRef(
@@ -197,13 +193,9 @@ const AddProductForm = ({ onFinish, onCancel }: AddProductFormProps) => {
     return new Map(sizes.map((item) => [item.value, item.label]));
   }, [sizes]);
 
-  const materialMap = useMemo(() => {
-    return new Map(materials.map((item) => [item.value, item.label]));
-  }, [materials]);
-
   const getVariantKey = (
-    item: Pick<VariantItem, "color_id" | "size_id" | "material_id">,
-  ) => `${item.color_id}-${item.size_id}-${item.material_id}`;
+    item: Pick<VariantItem, "color_id" | "size_id">,
+  ) => `${item.color_id}-${item.size_id}`;
 
   const findDuplicateVariant = (items: VariantItem[]) => {
     const seen = new Set<string>();
@@ -230,46 +222,34 @@ const AddProductForm = ({ onFinish, onCancel }: AddProductFormProps) => {
     );
   };
 
-  const buildVariants = (
-    colorIds: number[],
-    sizeIds: number[],
-    materialIds: number[],
-  ) => {
+  const buildVariants = (colorIds: number[], sizeIds: number[]) => {
     const oldVariants: VariantItem[] = variantRows.length
       ? variantRows
       : form.getFieldValue("variants") || [];
 
     const oldVariantMap = new Map(
-      oldVariants.map((item) => [
-        `${item.color_id}-${item.size_id}-${item.material_id}`,
-        item,
-      ]),
+      oldVariants.map((item) => [`${item.color_id}-${item.size_id}`, item]),
     );
 
     const generated: VariantItem[] = [];
 
     colorIds.forEach((colorId: number) => {
       sizeIds.forEach((sizeId: number) => {
-        materialIds.forEach((materialId: number) => {
-          const key = `${colorId}-${sizeId}-${materialId}`;
-          const oldItem = oldVariantMap.get(key);
+        const key = `${colorId}-${sizeId}`;
+        const oldItem = oldVariantMap.get(key);
 
-          const colorName = colorMap.get(colorId) || "";
-          const sizeName = sizeMap.get(sizeId) || "";
-          const materialName = materialMap.get(materialId) || "";
+        const colorName = colorMap.get(colorId) || "";
+        const sizeName = sizeMap.get(sizeId) || "";
 
-          generated.push({
-            color_id: colorId,
-            color_name: colorName,
-            size_id: sizeId,
-            size_name: sizeName,
-            material_id: materialId,
-            material_name: materialName,
-            cost_price: oldItem?.cost_price ?? null,
-            selling_price: oldItem?.selling_price ?? null,
-            stock_quantity: oldItem?.stock_quantity ?? 0,
-            is_active: oldItem?.is_active ?? true,
-          });
+        generated.push({
+          color_id: colorId,
+          color_name: colorName,
+          size_id: sizeId,
+          size_name: sizeName,
+          cost_price: oldItem?.cost_price ?? null,
+          selling_price: oldItem?.selling_price ?? null,
+          stock_quantity: oldItem?.stock_quantity ?? 0,
+          is_active: oldItem?.is_active ?? true,
         });
       });
     });
@@ -278,7 +258,7 @@ const AddProductForm = ({ onFinish, onCancel }: AddProductFormProps) => {
 
     if (duplicateVariant) {
       message.error(
-        `Biến thể bị trùng: ${duplicateVariant.color_name} / ${duplicateVariant.size_name} / ${duplicateVariant.material_name}`,
+        `Biến thể bị trùng: ${duplicateVariant.color_name} / ${duplicateVariant.size_name}`,
       );
       return 0;
     }
@@ -290,20 +270,12 @@ const AddProductForm = ({ onFinish, onCancel }: AddProductFormProps) => {
   };
 
   const handleGenerateVariants = () => {
-    if (
-      !selectedColorIds.length ||
-      !selectedSizeIds.length ||
-      !selectedMaterialIds.length
-    ) {
-      message.warning("Vui lòng chọn ít nhất 1 màu sắc, 1 kích cỡ và 1 chất liệu");
+    if (!selectedColorIds.length || !selectedSizeIds.length) {
+      message.warning("Vui lòng chọn ít nhất 1 màu sắc và 1 kích cỡ");
       return;
     }
 
-    const total = buildVariants(
-      selectedColorIds,
-      selectedSizeIds,
-      selectedMaterialIds,
-    );
+    const total = buildVariants(selectedColorIds, selectedSizeIds);
 
     if (total > 0) {
       message.success(`Đã tạo ${total} biến thể`);
@@ -313,22 +285,18 @@ const AddProductForm = ({ onFinish, onCancel }: AddProductFormProps) => {
   const handleQuickGenerateVariants = () => {
     const allColorIds = colors.map((item) => item.value);
     const allSizeIds = sizes.map((item) => item.value);
-    const allMaterialIds = materials.map((item) => item.value);
 
-    if (!allColorIds.length || !allSizeIds.length || !allMaterialIds.length) {
-      message.warning(
-        "Chưa có đủ dữ liệu màu sắc, kích cỡ hoặc chất liệu để tạo nhanh",
-      );
+    if (!allColorIds.length || !allSizeIds.length) {
+      message.warning("Chưa có đủ dữ liệu màu sắc hoặc kích cỡ để tạo nhanh");
       return;
     }
 
     form.setFieldsValue({
       selected_color_ids: allColorIds,
       selected_size_ids: allSizeIds,
-      selected_material_ids: allMaterialIds,
     });
 
-    const total = buildVariants(allColorIds, allSizeIds, allMaterialIds);
+    const total = buildVariants(allColorIds, allSizeIds);
 
     if (total > 0) {
       message.success(`Đã tạo nhanh ${total} biến thể`);
@@ -461,7 +429,7 @@ const AddProductForm = ({ onFinish, onCancel }: AddProductFormProps) => {
       Number(currentVariant.selling_price) < Number(currentVariant.cost_price)
     ) {
       message.warning(
-        `Giá bán của biến thể ${currentVariant.color_name} / ${currentVariant.size_name} / ${currentVariant.material_name} đang nhỏ hơn giá nhập`,
+        `Giá bán của biến thể ${currentVariant.color_name} / ${currentVariant.size_name} đang nhỏ hơn giá nhập`,
       );
     }
 
@@ -484,7 +452,6 @@ const AddProductForm = ({ onFinish, onCancel }: AddProductFormProps) => {
       variants: variantRows.map((item) => ({
         color_id: item.color_id,
         size_id: item.size_id,
-        material_id: item.material_id,
         cost_price: item.cost_price,
         selling_price: item.selling_price,
         stock_quantity: item.stock_quantity,
@@ -516,7 +483,7 @@ const AddProductForm = ({ onFinish, onCancel }: AddProductFormProps) => {
 
     if (duplicateVariant) {
       message.error(
-        `Không thể lưu vì trùng biến thể: ${duplicateVariant.color_name} / ${duplicateVariant.size_name} / ${duplicateVariant.material_name}`,
+        `Không thể lưu vì trùng biến thể: ${duplicateVariant.color_name} / ${duplicateVariant.size_name}`,
       );
       return;
     }
@@ -525,7 +492,7 @@ const AddProductForm = ({ onFinish, onCancel }: AddProductFormProps) => {
 
     if (invalidProfitVariant) {
       message.error(
-        `Không thể lưu vì giá bán nhỏ hơn giá nhập ở biến thể: ${invalidProfitVariant.color_name} / ${invalidProfitVariant.size_name} / ${invalidProfitVariant.material_name}`,
+        `Không thể lưu vì giá bán nhỏ hơn giá nhập ở biến thể: ${invalidProfitVariant.color_name} / ${invalidProfitVariant.size_name}`,
       );
       return;
     }
@@ -542,7 +509,7 @@ const AddProductForm = ({ onFinish, onCancel }: AddProductFormProps) => {
         is_active: true,
         selected_color_ids: [],
         selected_size_ids: [],
-        selected_material_ids: [],
+        material_id: undefined,
         variants: [],
       }}
     >
@@ -654,23 +621,18 @@ const AddProductForm = ({ onFinish, onCancel }: AddProductFormProps) => {
         <Row gutter={16} align="middle">
           <Col xs={24} md={12}>
             <Form.Item
-              name="selected_material_ids"
+              name="material_id"
               label="Chất liệu"
               style={compactFormItemStyle}
-              rules={[
-                {
-                  required: true,
-                  message: "Vui lòng chọn ít nhất 1 chất liệu",
-                },
-              ]}
+              rules={[{ required: true, message: "Vui lòng chọn chất liệu" }]}
             >
               <Select
-                mode="multiple"
                 placeholder="Chọn chất liệu sản phẩm"
                 options={materials}
                 loading={loading}
                 optionFilterProp="label"
                 showSearch
+                allowClear
               />
             </Form.Item>
           </Col>
@@ -890,9 +852,9 @@ const AddProductForm = ({ onFinish, onCancel }: AddProductFormProps) => {
         <Space direction="vertical" style={{ width: "100%" }} size={12}>
           {variantRows.map((variant, index) => (
             <Card
-              key={`${variant.color_id}-${variant.size_id}-${variant.material_id}`}
+              key={`${variant.color_id}-${variant.size_id}`}
               size="small"
-              title={`Biến thể: ${variant.color_name} / ${variant.size_name} / ${variant.material_name}`}
+              title={`Biến thể: ${variant.color_name} / ${variant.size_name}`}
             >
               <Row gutter={16}>
                 <Col span={6}>

@@ -18,6 +18,7 @@ import com.vn.backend.service.DiscountService;
 import com.vn.backend.service.ProductPriceService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -71,6 +72,19 @@ public class DiscountServiceImpl implements DiscountService {
     public Coupon findCouponByCode(String code) {
         return couponRepository.findByCodeAndIsActiveTrue(normalizeCode(code))
                 .orElse(null);
+    }
+
+    @Override
+    @Transactional
+    public ValidateDiscountResponse validateDiscountForConsume(String code, BigDecimal subtotal, Long userId) {
+        if (code == null || code.isBlank()) {
+            throw new InvalidRequestException("Ma giam gia khong duoc de trong.");
+        }
+        String normalizedCode = normalizeCode(code);
+        Customer customer = resolveCustomer(userId);
+        Coupon lockedCoupon = couponRepository.findByCodeForUpdate(normalizedCode)
+                .orElseThrow(() -> new InvalidRequestException("Ma giam gia khong ton tai."));
+        return validateCoupon(lockedCoupon, customer, defaultZero(subtotal));
     }
 
     private ValidateDiscountResponse validateCoupon(Coupon coupon, Customer customer, BigDecimal subtotal) {

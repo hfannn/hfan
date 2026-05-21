@@ -3,86 +3,100 @@ package com.vn.backend.service.impl;
 import com.vn.backend.entity.Order;
 import com.vn.backend.entity.OrderStatusHistory;
 import com.vn.backend.entity.Payment;
+import com.vn.backend.entity.StockReservation;
 import com.vn.backend.repository.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
 import java.time.OffsetDateTime;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
 public class OnlineOrderExpirationScheduler {
 
-    private static final String ORDER_TYPE_ONLINE = "ONLINE";
-    private static final String ORDER_STATUS_PENDING = "PENDING";
+    private static final String ORDER_STATUS_PENDING   = "PENDING";
     private static final String ORDER_STATUS_CANCELLED = "CANCELLED";
 
     private static final String PAYMENT_STATUS_PENDING = "PENDING";
     private static final String PAYMENT_STATUS_EXPIRED = "EXPIRED";
-    private static final String PAYMENT_CODE_VNPAY = "VNPAY";
 
-    private static final long EXPIRE_MINUTES = 5;
+    private static final String RESERVATION_RESERVED = "RESERVED";
+    private static final String RESERVATION_EXPIRED  = "EXPIRED";
 
     private final OrderRepository orderRepository;
     private final PaymentRepository paymentRepository;
     private final CouponUsageRepository couponUsageRepository;
     private final OrderStatusHistoryRepository orderStatusHistoryRepository;
-    private final OrderInventoryService orderInventoryService;
+    private final StockReservationRepository stockReservationRepository;
 
-    @Scheduled(fixedDelay = 60000)
+    /**
+     * Chay moi 30 giay.
+     * Tim cac reservation RESERVED da het han (expiresAt < now).
+     * Expire chung va cancel order/payment tuong ung neu con PENDING.
+     * Khong cong lai stockQuantity vi VNPay dung soft reservation (khong tru that).
+     */
+    @Scheduled(fixedDelay = 30000)
     @Transactional
-    public void autoCancelExpiredOnlineOrders() {
-        OffsetDateTime expiredBefore = OffsetDateTime.now().minusMinutes(EXPIRE_MINUTES);
+    public void expireStaleReservations() {
+        OffsetDateTime now = OffsetDateTime.now();
 
-        List<Order> expiredOrders = orderRepository.findByOrderTypeAndStatusAndCreatedAtBefore(
-                ORDER_TYPE_ONLINE,
-                ORDER_STATUS_PENDING,
-                expiredBefore
-        );
+        List<StockReservation> expiredList = stockReservationRepository.findExpiredReservations(now);
+        if (expiredList.isEmpty()) {
+            return;
+        }
 
-        for (Order order : expiredOrders) {
-            Payment latestPayment = paymentRepository.findByOrder_Id(order.getId())
-                    .stream()
-                    .max(Comparator.comparing(Payment::getId))
-                    .orElse(null);
+        // Group theo orderId — xu ly tung don mot lan
+        Map<Long, List<StockReservation>> byOrder = expiredList.stream()
+                .collect(Collectors.groupingBy(StockReservation::getOrderId));
 
-            if (latestPayment == null) {
-                continue;
+        for (Map.Entry<Long, List<StockReservation>> entry : byOrder.entrySet()) {
+            Long orderId = entry.getKey();
+
+            // Expire tat ca reservation cua don nay
+            for (StockReservation reservation : entry.getValue()) {
+                if (RESERVATION_RESERVED.equals(reservation.getStatus())) {
+                    reservation.setStatus(RESERVATION_EXPIRED);
+                    reservation.setReleasedAt(now);
+                    reservation.setReleaseReason("TIMEOUT");
+                    stockReservationRepository.save(reservation);
+                }
             }
 
-            if (latestPayment.getPaymentMethod() == null
-                    || latestPayment.getPaymentMethod().getCode() == null
-                    || !PAYMENT_CODE_VNPAY.equalsIgnoreCase(latestPayment.getPaymentMethod().getCode())) {
-                continue;
-            }
+            // Cap nhat payment va order neu van con PENDING
+            orderRepository.findById(orderId).ifPresent(order -> {
+                Payment latestPayment = paymentRepository.findByOrder_Id(orderId)
+                        .stream()
+                        .max(Comparator.comparing(Payment::getId))
+                        .orElse(null);
 
-            if (!PAYMENT_STATUS_PENDING.equalsIgnoreCase(latestPayment.getStatus())) {
-                continue;
-            }
+                if (latestPayment != null
+                        && PAYMENT_STATUS_PENDING.equalsIgnoreCase(latestPayment.getStatus())) {
+                    latestPayment.setStatus(PAYMENT_STATUS_EXPIRED);
+                    latestPayment.setNote("Het thoi gian thanh toan VNPay (15 phut)");
+                    paymentRepository.save(latestPayment);
+                }
 
-            latestPayment.setStatus(PAYMENT_STATUS_EXPIRED);
-            latestPayment.setNote("Hết thời gian thanh toán VNPAY sau " + EXPIRE_MINUTES + " phút");
-            paymentRepository.save(latestPayment);
+                if (ORDER_STATUS_PENDING.equalsIgnoreCase(order.getStatus())) {
+                    String previousStatus = order.getStatus();
+                    order.setStatus(ORDER_STATUS_CANCELLED);
+                    orderRepository.save(order);
 
-            orderInventoryService.releaseStockForOrder(order, "ONLINE_VNPAY_EXPIRED");
+                    couponUsageRepository.deleteByOrder_Id(orderId);
 
-            String previousStatus = order.getStatus();
-            order.setStatus(ORDER_STATUS_CANCELLED);
-            orderRepository.save(order);
-
-            couponUsageRepository.deleteByOrder_Id(order.getId());
-
-            OrderStatusHistory history = OrderStatusHistory.builder()
-                    .order(order)
-                    .fromStatus(previousStatus)
-                    .toStatus(ORDER_STATUS_CANCELLED)
-                    .changedAt(OffsetDateTime.now())
-                    .build();
-
-            orderStatusHistoryRepository.save(history);
+                    orderStatusHistoryRepository.save(OrderStatusHistory.builder()
+                            .order(order)
+                            .fromStatus(previousStatus)
+                            .toStatus(ORDER_STATUS_CANCELLED)
+                            .changedAt(now)
+                            .build());
+                }
+            });
         }
     }
 }

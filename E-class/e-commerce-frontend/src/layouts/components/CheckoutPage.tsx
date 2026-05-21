@@ -123,6 +123,10 @@ const CheckoutPage = () => {
   const [availableVouchers, setAvailableVouchers] = useState<any[]>([]);
   const [voucherApplying, setVoucherApplying] = useState(false);
   const [voucherError, setVoucherError] = useState("");
+  const [voucherSnapshot, setVoucherSnapshot] = useState<{
+    discountAmount: number;
+    finalTotal: number;
+  } | null>(null);
   const [voucherPickerOpen, setVoucherPickerOpen] = useState(false);
   const [manualVoucherSelection, setManualVoucherSelection] = useState(false);
   const [userRemovedVoucher, setUserRemovedVoucher] = useState(false);
@@ -175,7 +179,7 @@ const CheckoutPage = () => {
           variantCode: item.variantCode,
           size: item.size,
           color: item.color,
-          material: item.material,
+          material: item.materialName ?? item.material ?? null,
           imageUrl: item.image || item.imageUrl,
           quantity,
           originalPrice: Number(
@@ -900,6 +904,21 @@ const CheckoutPage = () => {
     }
   }, [isAuthenticated, form]);
 
+  useEffect(() => {
+    if (
+      quote?.voucherValid === true &&
+      appliedVoucher != null &&
+      quote.voucherDiscountAmount != null
+    ) {
+      setVoucherSnapshot({
+        discountAmount: Number(quote.voucherDiscountAmount),
+        finalTotal: Number(quote.finalTotal ?? 0),
+      });
+    } else if (appliedVoucher == null) {
+      setVoucherSnapshot(null);
+    }
+  }, [quote, appliedVoucher]);
+
   const handleAddressSelect = async (
     address: Address,
     options: { closeModal?: boolean; showError?: boolean; index?: number } = {},
@@ -1108,6 +1127,39 @@ const CheckoutPage = () => {
     }
   };
 
+  const isVoucherChangeConflict = (error: any) =>
+    error?.response?.status === 409 &&
+    error?.response?.data?.errorCode === "NEED_CONFIRM_VOUCHER_CHANGED";
+
+  const showVoucherChangeConfirm = (data: any, onOk: () => void) => {
+    const code = data.voucherCode || appliedVoucher || "";
+    Modal.confirm({
+      title: "Voucher đã thay đổi",
+      content: (
+        <div>
+          <p>
+            Voucher <strong>{code}</strong> đã được cập nhật sau khi bạn áp
+            dụng.
+          </p>
+          <p>
+            Giảm giá:{" "}
+            <strong>{formatMoney(data.oldDiscountAmount)}</strong> →{" "}
+            <strong>{formatMoney(data.newDiscountAmount)}</strong>
+          </p>
+          <p>
+            Tổng tiền:{" "}
+            <strong>{formatMoney(data.oldFinalTotal)}</strong> →{" "}
+            <strong>{formatMoney(data.newFinalTotal)}</strong>
+          </p>
+          <p>Bạn có muốn tiếp tục thanh toán với giá mới không?</p>
+        </div>
+      ),
+      okText: "Tiếp tục",
+      cancelText: "Hủy",
+      onOk,
+    });
+  };
+
   const handlePlaceOrder = async (values: any) => {
     const normalizedValues = {
       ...values,
@@ -1155,6 +1207,10 @@ const CheckoutPage = () => {
         quantity: item.quantity,
       })),
       voucherCode: appliedVoucher || undefined,
+      previewDiscountAmount:
+        appliedVoucher && voucherSnapshot != null
+          ? voucherSnapshot.discountAmount
+          : undefined,
     };
 
     if (normalizedValues.paymentMethod === "VNPAY") {
@@ -1173,11 +1229,18 @@ const CheckoutPage = () => {
       setAppliedVoucher(null);
       setAppliedVoucherInfo(null);
       setVoucherCode("");
+      setVoucherSnapshot(null);
       setQuote(null);
 
       message.success("Đặt hàng thành công!");
       navigate("/cart?tab=pending");
     } catch (error: any) {
+      if (isVoucherChangeConflict(error) && !orderData.confirmVoucherChanged) {
+        showVoucherChangeConfirm(error.response.data, () =>
+          submitOrder({ ...orderData, confirmVoucherChanged: true }),
+        );
+        return;
+      }
       const errorMessage =
         error.response?.data?.message || "Đặt hàng thất bại. Vui lòng thử lại.";
       if (isStockRelatedError(errorMessage)) {
@@ -1213,6 +1276,12 @@ const CheckoutPage = () => {
 
       window.location.href = paymentUrl;
     } catch (error: any) {
+      if (isVoucherChangeConflict(error) && !orderData.confirmVoucherChanged) {
+        showVoucherChangeConfirm(error.response.data, () =>
+          submitOrderAndRedirectVnpay({ ...orderData, confirmVoucherChanged: true }),
+        );
+        return;
+      }
       const errorMessage =
         error.response?.data?.message ||
         error.message ||

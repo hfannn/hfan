@@ -8,6 +8,7 @@ export interface ProductUpdatePayload {
   categoryId: number;
   originId: number;
   supplierId: number;
+  materialId?: number | null;
   isActive?: boolean;
 }
 

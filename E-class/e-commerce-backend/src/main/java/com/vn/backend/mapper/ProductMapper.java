@@ -84,6 +84,9 @@ public class ProductMapper {
                 p.getSupplier() != null ? p.getSupplier().getId() : null,
                 p.getSupplier() != null ? p.getSupplier().getName() : null,
 
+                p.getMaterial() != null ? p.getMaterial().getId() : null,
+                p.getMaterial() != null ? p.getMaterial().getValue() : null,
+
                 p.getIsActive(),
                 p.getDeletedAt(),
 
@@ -91,4 +94,5 @@ public class ProductMapper {
                 images
         );
     }
+
 }

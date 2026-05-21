@@ -31,6 +31,7 @@ const EditProductModal: React.FC<EditProductModalProps> = ({
   const [categories, setCategories] = useState<SelectOption[]>([]);
   const [origins, setOrigins] = useState<SelectOption[]>([]);
   const [suppliers, setSuppliers] = useState<SelectOption[]>([]);
+  const [materials, setMaterials] = useState<SelectOption[]>([]);
 
   const formatOptions = (raw: any): SelectOption[] => {
     let list: any[] = [];
@@ -68,12 +69,13 @@ const EditProductModal: React.FC<EditProductModalProps> = ({
       setLoading(true);
 
       try {
-        const [brandRes, categoryRes, originRes, supplierRes, detailRes] =
+        const [brandRes, categoryRes, originRes, supplierRes, materialRes, detailRes] =
           await Promise.all([
             productService.getBrands(),
             productService.getCategories(),
             productService.getOrigins(),
             productService.getSuppliers(),
+            productService.getMaterials(),
             productService.getProductById(productId, true),
           ]);
 
@@ -81,11 +83,13 @@ const EditProductModal: React.FC<EditProductModalProps> = ({
         const categoryOptions = formatOptions(categoryRes.data);
         const originOptions = formatOptions(originRes.data);
         const supplierOptions = formatOptions(supplierRes.data);
+        const materialOptions = formatOptions(materialRes.data);
 
         setBrands(brandOptions);
         setCategories(categoryOptions);
         setOrigins(originOptions);
         setSuppliers(supplierOptions);
+        setMaterials(materialOptions);
 
         const product = detailRes.data;
 
@@ -109,6 +113,8 @@ const EditProductModal: React.FC<EditProductModalProps> = ({
           supplierId:
             product.supplierId ??
             findOptionByLabel(supplierOptions, product.supplierName),
+
+          materialId: product.materialId ?? null,
 
           isActive: product.isActive !== false,
         });
@@ -135,6 +141,7 @@ const EditProductModal: React.FC<EditProductModalProps> = ({
       categoryId: values.categoryId,
       originId: values.originId,
       supplierId: values.supplierId,
+      materialId: values.materialId ?? null,
       isActive: values.isActive,
     });
   };
@@ -214,6 +221,16 @@ const EditProductModal: React.FC<EditProductModalProps> = ({
               optionFilterProp="label"
               options={suppliers}
               placeholder="Chọn nhà cung cấp"
+            />
+          </Form.Item>
+
+          <Form.Item name="materialId" label="Chất liệu">
+            <Select
+              showSearch
+              optionFilterProp="label"
+              options={materials}
+              placeholder="Chọn chất liệu"
+              allowClear
             />
           </Form.Item>
 

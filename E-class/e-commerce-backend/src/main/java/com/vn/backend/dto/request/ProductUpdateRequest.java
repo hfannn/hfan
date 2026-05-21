@@ -26,4 +26,5 @@ public class ProductUpdateRequest {
 
     private String description;
     private Boolean isActive;
+    private Long materialId;
 }

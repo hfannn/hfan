@@ -94,6 +94,7 @@ public class PosServiceImpl implements PosService {
     private final UserProfileRepository userProfileRepository;
     private final ProductPriceService productPriceService;
     private final EntityManager entityManager;
+    private final StockReservationService stockReservationService;
 
     @Override
     public PosOrderResponse createOrder(PosCreateOrderRequest request) {
@@ -206,12 +207,17 @@ public class PosServiceImpl implements PosService {
         ProductVariant variant = getLockedVariantOrThrow(request.getProductVariantId());
 
         if (!isSellableVariant(variant)) {
-            throw new IllegalArgumentException("Sản phẩm không khả dụng để bán");
+            throw new IllegalArgumentException("San pham khong kha dung de ban");
         }
 
-        Integer currentStock = variant.getStockQuantity() == null ? 0 : variant.getStockQuantity();
-        if (currentStock < addQty) {
-            throw new IllegalArgumentException("Sản phẩm đang hết hàng hoặc không đủ tồn kho");
+        Integer currentStock   = variant.getStockQuantity() == null ? 0 : variant.getStockQuantity();
+        int activeReserved     = stockReservationService.getActiveReservedQuantity(variant.getId());
+        int availableStock     = currentStock - activeReserved;
+        if (availableStock < addQty) {
+            String msg = activeReserved > 0 && currentStock >= addQty
+                    ? "San pham dang duoc giu boi don thanh toan online, ton kha dung khong du"
+                    : "San pham dang het hang hoac khong du ton kho";
+            throw new IllegalArgumentException(msg);
         }
 
         Optional<OrderItem> existingItemOpt =
@@ -281,9 +287,14 @@ public class PosServiceImpl implements PosService {
         int delta = newQty - oldQty;
 
         if (delta > 0) {
-            Integer currentStock = variant.getStockQuantity() == null ? 0 : variant.getStockQuantity();
-            if (currentStock < delta) {
-                throw new IllegalArgumentException("Sản phẩm đang hết hàng hoặc không đủ tồn kho");
+            Integer currentStock  = variant.getStockQuantity() == null ? 0 : variant.getStockQuantity();
+            int activeReserved    = stockReservationService.getActiveReservedQuantity(variant.getId());
+            int availableStock    = currentStock - activeReserved;
+            if (availableStock < delta) {
+                String msg = activeReserved > 0 && currentStock >= delta
+                        ? "San pham dang duoc giu boi don thanh toan online, ton kha dung khong du"
+                        : "San pham dang het hang hoac khong du ton kho";
+                throw new IllegalArgumentException(msg);
             }
 
             createInventoryTransaction(

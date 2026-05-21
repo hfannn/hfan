@@ -1,4 +1,5 @@
 package com.vn.backend.entity;
+import com.vn.backend.entity.AttributeValue;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
@@ -47,6 +48,10 @@ public class Product {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "supplier_id")
     private Supplier supplier;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "material_id")
+    private AttributeValue material;
 
     @OneToMany(mappedBy = "product", cascade = CascadeType.ALL, orphanRemoval = true)
     private java.util.Set<FavoriteProduct> favoriteProducts = new java.util.HashSet<>();

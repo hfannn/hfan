@@ -26,4 +26,5 @@ public class ProductCreateRequest {
 
     private String description;
     private Boolean isActive;
+    private Long materialId;
 }

@@ -32,6 +32,7 @@ import com.vn.backend.entity.User;
 import com.vn.backend.entity.UserProfile;
 import com.vn.backend.exception.InvalidRequestException;
 import com.vn.backend.exception.ResourceNotFoundException;
+import com.vn.backend.exception.VoucherChangedException;
 import com.vn.backend.repository.CartItemRepository;
 import com.vn.backend.repository.CouponUsageRepository;
 import com.vn.backend.repository.CustomerRepository;
@@ -96,6 +97,7 @@ public class OrderServiceImpl implements OrderService {
     private final CheckoutQuoteService checkoutQuoteService;
     private final ReviewRepository reviewRepository;
     private final OrderInventoryService orderInventoryService;
+    private final StockReservationService stockReservationService;
 
     private static final String ORDER_TYPE_ONLINE = "ONLINE";
     private static final String ORDER_TYPE_POS = "POS";
@@ -186,6 +188,24 @@ public class OrderServiceImpl implements OrderService {
             ));
         }
 
+        if (StringUtils.hasText(request.getVoucherCode())
+                && request.getPreviewDiscountAmount() != null
+                && !Boolean.TRUE.equals(request.getConfirmVoucherChanged())) {
+            BigDecimal newDiscount = defaultZero(quote.getVoucherDiscountAmount());
+            BigDecimal oldDiscount = defaultZero(request.getPreviewDiscountAmount());
+            if (newDiscount.compareTo(oldDiscount) != 0) {
+                BigDecimal newFinalTotal = defaultZero(quote.getFinalTotal());
+                BigDecimal oldFinalTotal = newFinalTotal.subtract(newDiscount).add(oldDiscount);
+                throw new VoucherChangedException(
+                        request.getVoucherCode(),
+                        oldDiscount,
+                        newDiscount,
+                        oldFinalTotal,
+                        newFinalTotal
+                );
+            }
+        }
+
         for (CheckoutQuoteItemResponse quoteItem : quote.getItems()) {
             ProductVariant variant = variantsMap.get(quoteItem.getVariantId());
 
@@ -263,9 +283,6 @@ public class OrderServiceImpl implements OrderService {
 
         Order savedOrder = orderRepository.save(order);
 
-        orderInventoryService.reserveStockForOnlineOrder(savedOrder);
-        savedOrder = orderRepository.save(savedOrder);
-
         saveOrderStatusHistory(savedOrder, null, ORDER_STATUS_PENDING);
 
         PaymentMethod paymentMethod = paymentMethodRepository.findByCode(request.getPaymentMethodCode())
@@ -275,13 +292,21 @@ public class OrderServiceImpl implements OrderService {
 
         boolean isVnpayPayment = "VNPAY".equalsIgnoreCase(paymentMethod.getCode());
 
-        if (!isVnpayPayment && appliedCoupon != null) {
-            CouponUsage usage = CouponUsage.builder()
-                    .order(savedOrder)
-                    .customer(customer)
-                    .coupon(appliedCoupon)
-                    .build();
-            couponUsageRepository.save(usage);
+        // Khong tru ton kho tai placeOrder:
+        // - VNPay: reservation tao trong createOnlinePaymentUrl (khi user bam thanh toan)
+        // - COD: tru ton khi admin xac nhan (updateOrderStatus PENDING->CONFIRMED)
+
+        if (!isVnpayPayment && StringUtils.hasText(appliedVoucherCode)) {
+            // Re-validate with PESSIMISTIC_WRITE lock to prevent concurrent over-usage.
+            // Throws InvalidRequestException if voucher is now invalid or limit is reached.
+            discountService.validateDiscountForConsume(appliedVoucherCode, subtotalBeforeVoucher, userId);
+            if (appliedCoupon != null) {
+                couponUsageRepository.save(CouponUsage.builder()
+                        .order(savedOrder)
+                        .customer(customer)
+                        .coupon(appliedCoupon)
+                        .build());
+            }
         }
 
         Payment payment = Payment.builder()
@@ -537,11 +562,15 @@ public class OrderServiceImpl implements OrderService {
                 && ORDER_STATUS_CONFIRMED.equals(normalizedStatus)
                 && ORDER_TYPE_ONLINE.equalsIgnoreCase(order.getOrderType())
                 && !Boolean.TRUE.equals(order.getInventoryReserved())) {
-            orderInventoryService.reserveStockForOnlineOrder(order);
+            // COD: admin confirm → tru ton kho that (VNPay da tru truoc trong finalizeSuccessfulOnlinePayment)
+            orderInventoryService.deductStockForCodConfirm(order);
         }
 
         if (ORDER_STATUS_CANCELLED.equals(normalizedStatus)) {
             if (ORDER_TYPE_ONLINE.equalsIgnoreCase(order.getOrderType())) {
+                // Release soft reservation VNPay neu con dang RESERVED (chua thanh toan)
+                stockReservationService.releaseReservations(order.getId(), "ADMIN_CANCELLED");
+                // Cong lai ton kho that neu da tru (inventoryReserved=true: VNPay paid hoac COD confirmed)
                 orderInventoryService.releaseStockForOrder(order, "ONLINE_ORDER_ADMIN_CANCELLED");
                 couponUsageRepository.deleteByOrder_Id(order.getId());
             } else if (ORDER_STATUS_CONFIRMED.equals(previousStatus)) {
@@ -579,6 +608,9 @@ public class OrderServiceImpl implements OrderService {
         String previousStatus = order.getStatus();
 
         if (ORDER_TYPE_ONLINE.equalsIgnoreCase(order.getOrderType())) {
+            // Release soft reservation VNPay neu con dang RESERVED
+            stockReservationService.releaseReservations(order.getId(), "CUSTOMER_CANCELLED");
+            // Cong lai ton kho that neu da tru (inventoryReserved=true)
             orderInventoryService.releaseStockForOrder(order, "ONLINE_ORDER_CUSTOMER_CANCELLED");
         }
 

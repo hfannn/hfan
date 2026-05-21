@@ -64,9 +64,6 @@ const getVariantSize = (variant: Variant | null | undefined) =>
 const getVariantColor = (variant: Variant | null | undefined) =>
   getVariantAttribute(variant, "COLOR");
 
-const getVariantMaterial = (variant: Variant | null | undefined) =>
-  getVariantAttribute(variant, "MATERIAL");
-
 const getVariantStock = (variant: Variant | null | undefined) =>
   Number(variant?.stockQuantity ?? (variant as any)?.stock_quantity ?? 0);
 
@@ -96,7 +93,6 @@ const ProductDetailPage = () => {
   const [selectedImage, setSelectedImage] = useState<string>("");
   const [selectedSize, setSelectedSize] = useState<string | null>(null);
   const [selectedColor, setSelectedColor] = useState<string | null>(null);
-  const [selectedMaterial, setSelectedMaterial] = useState<string | null>(null);
   const [quantity, setQuantity] = useState(1);
   const [addingToCart, setAddingToCart] = useState(false);
   const addingToCartRef = useRef(false);
@@ -143,38 +139,22 @@ const ProductDetailPage = () => {
     );
   }, [product]);
 
-  const { allSizes, allColors, allMaterials } =
+  const { allSizes, allColors } =
     useMemo(() => {
       if (!product) {
-        return {
-          allSizes: [],
-          allColors: [],
-          allMaterials: [],
-        };
+        return { allSizes: [], allColors: [] };
       }
 
       const allSizes = [
-        ...new Set(
-          sellableVariants.map(getVariantSize).filter(Boolean),
-        ),
+        ...new Set(sellableVariants.map(getVariantSize).filter(Boolean)),
       ] as string[];
 
       const allColors = [
-        ...new Set(
-          sellableVariants.map(getVariantColor).filter(Boolean),
-        ),
+        ...new Set(sellableVariants.map(getVariantColor).filter(Boolean)),
       ] as string[];
 
-      const allMaterials = [
-        ...new Set(
-          sellableVariants.map(getVariantMaterial).filter(Boolean),
-        ),
-      ] as string[];
-
-      return { allSizes, allColors, allMaterials };
+      return { allSizes, allColors };
     }, [product, sellableVariants]);
-
-  const hasMaterialOptions = allMaterials.length > 0;
 
   const matchesSelectedSize = (variant: Variant) =>
     !selectedSize || getVariantSize(variant) === selectedSize;
@@ -183,7 +163,7 @@ const ProductDetailPage = () => {
     !selectedColor || getVariantColor(variant) === selectedColor;
 
   const selectedVariant = useMemo(() => {
-    if (!selectedSize || !selectedColor || (hasMaterialOptions && !selectedMaterial)) {
+    if (!selectedSize || !selectedColor) {
       return null;
     }
 
@@ -191,27 +171,10 @@ const ProductDetailPage = () => {
       sellableVariants.find(
         (v) =>
           getVariantSize(v) === selectedSize &&
-          getVariantColor(v) === selectedColor &&
-          (!hasMaterialOptions || getVariantMaterial(v) === selectedMaterial),
+          getVariantColor(v) === selectedColor,
       ) || null
     );
-  }, [sellableVariants, selectedSize, selectedColor, selectedMaterial, hasMaterialOptions]);
-
-  useEffect(() => {
-    if (!selectedMaterial) return;
-
-    const materialStillExists = sellableVariants.some(
-      (variant) =>
-        matchesSelectedSize(variant) &&
-        matchesSelectedColor(variant) &&
-        getVariantMaterial(variant) === selectedMaterial,
-    );
-
-    if (!materialStillExists) {
-      setSelectedMaterial(null);
-      setQuantity(1);
-    }
-  }, [sellableVariants, selectedSize, selectedColor, selectedMaterial]);
+  }, [sellableVariants, selectedSize, selectedColor]);
 
   useEffect(() => {
     if (!product) return;
@@ -276,23 +239,11 @@ const ProductDetailPage = () => {
     );
   };
 
-  const isMaterialDisabled = (material: string) => {
-    return !sellableVariants.some(
-      (variant) =>
-        getVariantMaterial(variant) === material &&
-        matchesSelectedSize(variant) &&
-        matchesSelectedColor(variant),
-    );
-  };
-  //
-
-  const handleSelectAttribute = (type: "size" | "color" | "material", value: string) => {
+  const handleSelectAttribute = (type: "size" | "color", value: string) => {
     if (type === "size") {
       setSelectedSize((prev) => (prev === value ? null : value));
-    } else if (type === "color") {
-      setSelectedColor((prev) => (prev === value ? null : value));
     } else {
-      setSelectedMaterial((prev) => (prev === value ? null : value));
+      setSelectedColor((prev) => (prev === value ? null : value));
     }
     setQuantity(1);
   };
@@ -303,11 +254,7 @@ const ProductDetailPage = () => {
     }
 
     if (!selectedVariant) {
-      message.warning(
-        hasMaterialOptions
-          ? "Vui lòng chọn đầy đủ kích cỡ, màu sắc và chất liệu"
-          : "Vui lòng chọn đầy đủ kích cỡ và màu sắc",
-      );
+      message.warning("Vui lòng chọn đầy đủ kích cỡ và màu sắc");
       return;
     }
 
@@ -358,12 +305,8 @@ const ProductDetailPage = () => {
       },
     });
   };
-  const hasCompleteSelection = Boolean(
-    selectedSize && selectedColor && (!hasMaterialOptions || selectedMaterial),
-  );
-  const selectionHint = hasMaterialOptions
-    ? "Vui lòng chọn kích cỡ, màu sắc và chất liệu để xem tồn kho"
-    : "Vui lòng chọn kích cỡ và màu sắc để xem tồn kho";
+  const hasCompleteSelection = Boolean(selectedSize && selectedColor);
+  const selectionHint = "Vui lòng chọn kích cỡ và màu sắc để xem tồn kho";
   const selectedStock = getVariantStock(selectedVariant);
   const isOutOfStock = !selectedVariant || selectedStock <= 0;
   const isLowStock =
@@ -498,9 +441,7 @@ const ProductDetailPage = () => {
                     )}
                 </Space>
               ) : (
-                hasMaterialOptions
-                  ? "Chọn kích cỡ, màu sắc và chất liệu để xem giá"
-                  : "Chọn kích cỡ và màu sắc để xem giá"
+                "Chọn kích cỡ và màu sắc để xem giá"
               )}
             </Title>
 
@@ -578,26 +519,10 @@ const ProductDetailPage = () => {
               </Space>
             </div>
 
-            {hasMaterialOptions && (
-              <div>
-                <Text strong>Chất liệu:</Text>
-                <Space wrap style={{ marginTop: 8, marginBottom: 16 }}>
-                  {allMaterials.map((material) => (
-                    <Button
-                      key={material}
-                      type={selectedMaterial === material ? "primary" : "default"}
-                      onClick={() => handleSelectAttribute("material", material)}
-                      disabled={isMaterialDisabled(material)}
-                      style={{
-                        whiteSpace: "normal",
-                        minHeight: 32,
-                        maxWidth: 180,
-                      }}
-                    >
-                      {material}
-                    </Button>
-                  ))}
-                </Space>
+            {(product as any).materialName && (
+              <div style={{ marginBottom: 12 }}>
+                <Text strong>Chất liệu: </Text>
+                <Text>{(product as any).materialName}</Text>
               </div>
             )}
 

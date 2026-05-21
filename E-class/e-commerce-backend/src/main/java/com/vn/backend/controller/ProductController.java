@@ -3,6 +3,7 @@ package com.vn.backend.controller;
 import com.vn.backend.dto.request.ProductCreateRequest;
 import com.vn.backend.dto.request.ProductUpdateRequest;
 import com.vn.backend.dto.response.PageResponse;
+import com.vn.backend.dto.response.ProductCreatedResponse;
 import com.vn.backend.dto.response.ProductDetailResponse;
 import com.vn.backend.dto.response.ProductListResponse;
 import com.vn.backend.entity.Product;
@@ -143,13 +144,15 @@ public class ProductController {
     }
 
     @PostMapping(value = "/with-images", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<Product> createWithImages(
+    public ResponseEntity<ProductCreatedResponse> createWithImages(
             @RequestPart("data") @Valid ProductCreateRequest request,
             @RequestPart(value = "image", required = false) MultipartFile image,
             @RequestPart(value = "images", required = false) List<MultipartFile> images
     ) {
         Product product = productService.createWithImages(request, image, images);
-        return ResponseEntity.ok(product);
+        return ResponseEntity.ok(new ProductCreatedResponse(
+                product.getId(), product.getId(), product.getCode(), product.getName()
+        ));
     }
 
     @PostMapping(value = "/upload-image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)

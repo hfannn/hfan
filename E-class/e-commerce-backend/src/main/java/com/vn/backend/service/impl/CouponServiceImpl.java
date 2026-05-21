@@ -87,6 +87,14 @@ public class CouponServiceImpl implements CouponService {
         Coupon coupon = couponRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy mã giảm giá với ID: " + id));
 
+        if (request.getUsageLimit() != null) {
+            long usedCount = couponUsageRepository.countValidUsagesByCouponId(id);
+            if (request.getUsageLimit() < usedCount) {
+                throw new IllegalArgumentException(
+                        "Tong luot su dung khong duoc nho hon so luot da dung (" + usedCount + ")");
+            }
+        }
+
         coupon.setCode(normalizedCode);
         coupon.setDiscountType(normalizedDiscountType);
         coupon.setDiscountValue(request.getDiscountValue());

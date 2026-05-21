@@ -27,11 +27,24 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import { userService } from "@/services/user.service";
 import type { User, PageResponse } from "@/features/user/user.model";
-const { Header, Sider, Content } = Layout;
-const { Title, Text } = Typography;
+
+const { Content } = Layout;
+const { Text } = Typography;
+
+const ROLE_FILTER_OPTIONS = [
+  { value: "ADMIN", label: "Quản trị viên" },
+  { value: "USER", label: "Người dùng" },
+];
+
+const toDisplayRole = (roleCode: string): string => {
+  if (!roleCode) return "Người dùng";
+  return roleCode.toUpperCase() === "ADMIN" ? "Quản trị viên" : "Người dùng";
+};
+
+const toRoleTagColor = (roleCode: string): string =>
+  roleCode?.toUpperCase() === "ADMIN" ? "red" : "blue";
 
 const UserManagementPage = () => {
-
   const [users, setUsers] = useState<User[]>([]);
   const [roles, setRoles] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -42,7 +55,7 @@ const UserManagementPage = () => {
   const [total, setTotal] = useState(0);
 
   const [searchText, setSearchText] = useState("");
-  const [roleFilter, setRoleFilter] = useState<number | undefined>(undefined);
+  const [roleFilter, setRoleFilter] = useState<string | undefined>(undefined);
 
   const [openModal, setOpenModal] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
@@ -51,7 +64,6 @@ const UserManagementPage = () => {
   const [detailData, setDetailData] = useState<any>(null);
 
   const [form] = Form.useForm();
-
 
   const fetchRoles = async () => {
     try {
@@ -67,7 +79,6 @@ const UserManagementPage = () => {
       setLoading(true);
       const res = await userService.getUsers(page, size, keyword);
       const data: PageResponse<User> = res.data;
-
       setUsers(data.content);
       setTotal(data.totalElements);
     } catch {
@@ -86,31 +97,41 @@ const UserManagementPage = () => {
       setPage(0);
       fetchUsers(searchText?.trim() ? searchText.trim() : undefined);
     }, 350);
-
     return () => clearTimeout(timer);
-
   }, [searchText]);
 
   useEffect(() => {
     fetchUsers(searchText?.trim() ? searchText.trim() : undefined);
-
   }, [page, size]);
 
+  // Client-side role filter: ADMIN → exact match, USER → all non-ADMIN
   const filteredUsers = useMemo(() => {
     if (!roleFilter) return users;
+    if (roleFilter === "ADMIN") return users.filter((u) => u.role?.toUpperCase() === "ADMIN");
+    if (roleFilter === "USER") return users.filter((u) => u.role?.toUpperCase() !== "ADMIN");
+    return users;
+  }, [users, roleFilter]);
 
-    const roleName = roles.find((r) => r.id === roleFilter)?.name;
-    if (!roleName) return users;
+  // Form role options: show only ADMIN and the first non-ADMIN role (CUSTOMER preferred)
+  const formRoleOptions = useMemo(() => {
+    const adminRole = roles.find((r: any) => r.code?.toUpperCase() === "ADMIN");
+    const userRole =
+      roles.find((r: any) => r.code?.toUpperCase() === "CUSTOMER") ||
+      roles.find((r: any) => r.code?.toUpperCase() !== "ADMIN");
+    const opts: { value: number; label: string }[] = [];
+    if (adminRole) opts.push({ value: adminRole.id, label: "Quản trị viên" });
+    if (userRole) opts.push({ value: userRole.id, label: "Người dùng" });
+    return opts;
+  }, [roles]);
 
-    return users.filter(
-      (u) => (u.role || "").toLowerCase() === roleName.toLowerCase(),
-    );
-  }, [users, roleFilter, roles]);
+  const getRoleDisplayByRoleId = (roleId: number) => {
+    const role = roles.find((r: any) => r.id === roleId);
+    return role?.code?.toUpperCase() === "ADMIN" ? "Quản trị viên" : "Người dùng";
+  };
 
   const handleStatusChange = async (id: number, isActive: boolean) => {
     const old = [...users];
     setUsers(users.map((u) => (u.id === id ? { ...u, isActive } : u)));
-
     try {
       await userService.updateStatus(id, isActive);
       message.success("Cập nhật trạng thái thành công");
@@ -140,9 +161,7 @@ const UserManagementPage = () => {
     try {
       const res = await userService.getUserById(record.id);
       const d = res.data;
-
       setEditingUser({ ...record, ...d });
-
       form.setFieldsValue({
         fullName: d.fullName,
         email: d.email,
@@ -150,9 +169,7 @@ const UserManagementPage = () => {
         address: d.address,
         birthday: d.birthday || undefined,
         roleId: d.roleId,
-        salary: d.salary,
       });
-
       setOpenModal(true);
     } catch {
       message.error("Không tải được dữ liệu để sửa");
@@ -178,20 +195,17 @@ const UserManagementPage = () => {
       const values = await form.validateFields();
 
       if (editingUser) {
-        const updatePayload = {
+        await userService.updateUser(editingUser.id, {
           email: values.email,
           fullName: values.fullName,
           phone: values.phone,
           address: values.address,
           birthday: normalizeBirthday(values.birthday),
           roleId: values.roleId,
-          salary: values.salary,
-        };
-
-        await userService.updateUser(editingUser.id, updatePayload);
+        });
         message.success("Cập nhật thành công");
       } else {
-        const createPayload = {
+        await userService.createUser({
           username: values.username,
           password: values.password,
           email: values.email,
@@ -200,10 +214,7 @@ const UserManagementPage = () => {
           phone: values.phone,
           address: values.address,
           birthday: normalizeBirthday(values.birthday),
-          salary: values.salary,
-        };
-
-        await userService.createUser(createPayload);
+        });
         message.success("Thêm người dùng thành công");
         setPage(0);
       }
@@ -218,9 +229,6 @@ const UserManagementPage = () => {
       setSubmitting(false);
     }
   };
-
-  const getRoleNameById = (roleId: number) =>
-    roles.find((r) => r.id === roleId)?.name || "Không xác định";
 
   const statusTag = (active: boolean) => (
     <Tag
@@ -238,7 +246,9 @@ const UserManagementPage = () => {
     {
       title: "Vai trò",
       dataIndex: "role",
-      render: (role: string) => <Tag color="blue">{role}</Tag>,
+      render: (role: string) => (
+        <Tag color={toRoleTagColor(role)}>{toDisplayRole(role)}</Tag>
+      ),
     },
     {
       title: "Trạng thái",
@@ -266,7 +276,6 @@ const UserManagementPage = () => {
               onClick={() => openEdit(record)}
             />
           </Tooltip>
-
           <Popconfirm
             title="Bạn chắc chắn muốn xóa?"
             onConfirm={() => handleDelete(record.id)}
@@ -275,7 +284,6 @@ const UserManagementPage = () => {
               <Button size="small" danger icon={<DeleteOutlined />} />
             </Tooltip>
           </Popconfirm>
-
           <Tooltip title="Xem">
             <Button
               size="small"
@@ -302,26 +310,19 @@ const UserManagementPage = () => {
             }}
           >
             <Space wrap>
-              <Button
-                type="primary"
-                icon={<PlusOutlined />}
-                onClick={openCreate}
-              >
-                Thêm người dùng
+              <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
+                Thêm tài khoản
               </Button>
-
               <Button
                 icon={<EditOutlined />}
                 disabled={!editingUser}
                 onClick={() => editingUser && openEdit(editingUser)}
               >
-                Sửa người dùng
+                Sửa tài khoản
               </Button>
-
               <Button danger icon={<DeleteOutlined />} disabled>
-                Xóa người dùng
+                Xóa tài khoản
               </Button>
-
               <Button
                 icon={<DownloadOutlined />}
                 onClick={() => message.info("Chưa làm export")}
@@ -332,14 +333,7 @@ const UserManagementPage = () => {
 
             <div style={{ marginTop: 14 }}>
               <Text strong>Tìm kiếm:</Text>
-              <div
-                style={{
-                  marginTop: 8,
-                  display: "flex",
-                  gap: 12,
-                  flexWrap: "wrap",
-                }}
-              >
+              <div style={{ marginTop: 8, display: "flex", gap: 12, flexWrap: "wrap" }}>
                 <Input
                   placeholder="Tên hoặc Email"
                   style={{ width: 320 }}
@@ -347,23 +341,19 @@ const UserManagementPage = () => {
                   onChange={(e) => setSearchText(e.target.value)}
                   allowClear
                 />
-
                 <Select
                   placeholder="Vai trò"
-                  style={{ width: 240 }}
+                  style={{ width: 200 }}
                   allowClear
                   value={roleFilter}
                   onChange={(v) => setRoleFilter(v)}
-                  options={roles.map((r) => ({ value: r.id, label: r.name }))}
+                  options={ROLE_FILTER_OPTIONS}
                 />
-
                 <Button
                   type="primary"
                   onClick={() => {
                     setPage(0);
-                    fetchUsers(
-                      searchText?.trim() ? searchText.trim() : undefined,
-                    );
+                    fetchUsers(searchText?.trim() ? searchText.trim() : undefined);
                   }}
                 >
                   Lọc
@@ -399,7 +389,7 @@ const UserManagementPage = () => {
           </div>
 
           <Modal
-            title={editingUser ? "Cập nhật người dùng" : "Thêm người dùng"}
+            title={editingUser ? "Cập nhật tài khoản" : "Thêm tài khoản"}
             open={openModal}
             onOk={handleSubmit}
             confirmLoading={submitting}
@@ -416,24 +406,17 @@ const UserManagementPage = () => {
                     name="username"
                     label="Tên đăng nhập"
                     rules={[
-                      {
-                        required: true,
-                        message: "Tên đăng nhập không được để trống",
-                      },
+                      { required: true, message: "Tên đăng nhập không được để trống" },
                       { min: 4, message: "Tối thiểu 4 ký tự" },
                     ]}
                   >
                     <Input />
                   </Form.Item>
-
                   <Form.Item
                     name="password"
                     label="Mật khẩu"
                     rules={[
-                      {
-                        required: true,
-                        message: "Mật khẩu không được để trống",
-                      },
+                      { required: true, message: "Mật khẩu không được để trống" },
                       { min: 6, message: "Tối thiểu 6 ký tự" },
                     ]}
                   >
@@ -496,29 +479,10 @@ const UserManagementPage = () => {
                 label="Vai trò"
                 rules={[{ required: true, message: "Vui lòng chọn vai trò" }]}
               >
-                <Select placeholder="Chọn vai trò">
-                  {roles.map((role) => (
-                    <Select.Option key={role.id} value={role.id}>
-                      {role.name}
-                    </Select.Option>
-                  ))}
-                </Select>
-              </Form.Item>
-
-              <Form.Item
-                name="salary"
-                label="Lương"
-                rules={[
-                  { required: true, message: "Không được để trống" },
-                  {
-                    validator: (_, value) =>
-                      value >= 0
-                        ? Promise.resolve()
-                        : Promise.reject(new Error("Lương phải >= 0")),
-                  },
-                ]}
-              >
-                <Input type="number" min={0} />
+                <Select
+                  placeholder="Chọn vai trò"
+                  options={formRoleOptions}
+                />
               </Form.Item>
             </Form>
           </Modal>
@@ -528,11 +492,7 @@ const UserManagementPage = () => {
             open={openDetail}
             onCancel={() => setOpenDetail(false)}
             footer={[
-              <Button
-                key="close"
-                type="primary"
-                onClick={() => setOpenDetail(false)}
-              >
+              <Button key="close" type="primary" onClick={() => setOpenDetail(false)}>
                 Đóng
               </Button>,
             ]}
@@ -551,39 +511,24 @@ const UserManagementPage = () => {
                     border: "1px solid #e9eeff",
                   }}
                 >
-                  <Avatar
-                    size={52}
-                    style={{
-                      background: "#1677ff",
-                      fontWeight: 700,
-                    }}
-                  >
+                  <Avatar size={52} style={{ background: "#1677ff", fontWeight: 700 }}>
                     {(detailData.fullName || detailData.username || "U")
                       .toString()
                       .trim()
                       .charAt(0)
                       .toUpperCase()}
                   </Avatar>
-
                   <div style={{ flex: 1 }}>
-                    <div
-                      style={{ fontSize: 18, fontWeight: 700, lineHeight: 1.2 }}
-                    >
+                    <div style={{ fontSize: 18, fontWeight: 700, lineHeight: 1.2 }}>
                       {detailData.fullName || "—"}
                     </div>
                     <div style={{ color: "#6b7280", marginTop: 4 }}>
                       @{detailData.username || "—"}
                     </div>
                   </div>
-
                   <Tag
                     color={detailData.isActive ? "green" : "red"}
-                    style={{
-                      padding: "6px 12px",
-                      borderRadius: 999,
-                      fontWeight: 600,
-                      margin: 0,
-                    }}
+                    style={{ padding: "6px 12px", borderRadius: 999, fontWeight: 600, margin: 0 }}
                   >
                     {detailData.isActive ? "Đang hoạt động" : "Ngừng hoạt động"}
                   </Tag>
@@ -595,47 +540,38 @@ const UserManagementPage = () => {
                   bordered
                   size="middle"
                   column={2}
-                  labelStyle={{
-                    width: 150,
-                    fontWeight: 600,
-                    background: "#fafafa",
-                  }}
+                  labelStyle={{ width: 150, fontWeight: 600, background: "#fafafa" }}
                   contentStyle={{ background: "#fff" }}
                 >
                   <Descriptions.Item label="Email">
                     {detailData.email || "—"}
                   </Descriptions.Item>
-
                   <Descriptions.Item label="Số điện thoại">
                     {detailData.phone || "—"}
                   </Descriptions.Item>
-
                   <Descriptions.Item label="Địa chỉ" span={2}>
                     {detailData.address || "—"}
                   </Descriptions.Item>
-
                   <Descriptions.Item label="Ngày sinh">
                     {detailData.birthday || "—"}
                   </Descriptions.Item>
-
                   <Descriptions.Item label="Vai trò">
-                    {getRoleNameById(detailData.roleId) || "—"}
+                    <Tag
+                      color={
+                        getRoleDisplayByRoleId(detailData.roleId) === "Quản trị viên"
+                          ? "red"
+                          : "blue"
+                      }
+                    >
+                      {getRoleDisplayByRoleId(detailData.roleId) || "—"}
+                    </Tag>
                   </Descriptions.Item>
-
-                  <Descriptions.Item label="Lương">
-                    {typeof detailData.salary === "number"
-                      ? `${detailData.salary.toLocaleString("vi-VN")} ₫`
-                      : "—"}
-                  </Descriptions.Item>
-
                   <Descriptions.Item label="Trạng thái">
                     <Tag
                       color={detailData.isActive ? "green" : "red"}
                       style={{ margin: 0, borderRadius: 6 }}
                     >
-                      {detailData.isActive
-                        ? "Đang hoạt động"
-                        : "Ngừng hoạt động"}
+                      {detailData.isActive ? "Đang hoạt động" : "Ngừng hoạt động"}
                     </Tag>
                   </Descriptions.Item>
                 </Descriptions>
