@@ -1,10 +1,12 @@
 package com.vn.backend.service.impl;
 
 import com.vn.backend.dto.request.CheckoutQuoteRequest;
+import com.vn.backend.dto.request.CheckoutValidationRequest;
 import com.vn.backend.dto.request.OrderItemRequest;
 import com.vn.backend.dto.request.ShippingInfoRequest;
 import com.vn.backend.dto.response.CheckoutQuoteItemResponse;
 import com.vn.backend.dto.response.CheckoutQuoteResponse;
+import com.vn.backend.dto.response.CheckoutValidationResponse;
 import com.vn.backend.dto.response.ProductPriceResponse;
 import com.vn.backend.dto.response.ValidateDiscountResponse;
 import com.vn.backend.entity.AttributeValue;
@@ -255,6 +257,217 @@ public class CheckoutQuoteServiceImpl implements CheckoutQuoteService {
         }
 
         return null;
+    }
+
+    @Override
+    public CheckoutValidationResponse validateCheckout(
+            CheckoutValidationRequest request,
+            CustomUserDetails userDetails
+    ) {
+        List<CheckoutValidationResponse.ValidationIssue> issues = new ArrayList<>();
+        boolean hasBlocking = false;
+        boolean hasRequiresConfirm = false;
+
+        // Build old-price lookup map by variantId
+        Map<Long, CheckoutValidationRequest.OldItemSnapshot> oldItemMap = new HashMap<>();
+        if (request.getOldItems() != null) {
+            for (CheckoutValidationRequest.OldItemSnapshot snap : request.getOldItems()) {
+                if (snap.getVariantId() != null) {
+                    oldItemMap.put(snap.getVariantId(), snap);
+                }
+            }
+        }
+
+        // Load fresh variants from DB
+        List<Long> variantIds = request.getItems().stream()
+                .map(OrderItemRequest::getVariantId)
+                .distinct()
+                .toList();
+
+        Map<Long, ProductVariant> variantMap = productVariantRepository.findAllById(variantIds)
+                .stream()
+                .collect(Collectors.toMap(ProductVariant::getId, v -> v));
+
+        BigDecimal newSubtotal = BigDecimal.ZERO;
+        List<CheckoutQuoteItemResponse> latestItems = new ArrayList<>();
+
+        for (OrderItemRequest item : request.getItems()) {
+            Long variantId = item.getVariantId();
+            ProductVariant variant = variantMap.get(variantId);
+
+            if (variant == null) {
+                issues.add(CheckoutValidationResponse.ValidationIssue.builder()
+                        .type("PRODUCT_INACTIVE")
+                        .severity("BLOCKING")
+                        .variantId(variantId)
+                        .message("Sản phẩm không còn tồn tại trong hệ thống")
+                        .build());
+                hasBlocking = true;
+                continue;
+            }
+
+            Long productId = variant.getProduct() != null ? variant.getProduct().getId() : null;
+            String productName = variant.getProduct() != null ? variant.getProduct().getName() : null;
+
+            // Check product active
+            if (variant.getProduct() == null
+                    || !Boolean.TRUE.equals(variant.getProduct().getIsActive())
+                    || variant.getProduct().getDeletedAt() != null) {
+                issues.add(CheckoutValidationResponse.ValidationIssue.builder()
+                        .type("PRODUCT_INACTIVE")
+                        .severity("BLOCKING")
+                        .productId(productId)
+                        .variantId(variantId)
+                        .productName(productName)
+                        .message("Sản phẩm \"" + productName + "\" đã ngừng bán")
+                        .build());
+                hasBlocking = true;
+                continue;
+            }
+
+            // Check variant active
+            if (!Boolean.TRUE.equals(variant.getIsActive()) || variant.getDeletedAt() != null) {
+                issues.add(CheckoutValidationResponse.ValidationIssue.builder()
+                        .type("VARIANT_INACTIVE")
+                        .severity("BLOCKING")
+                        .productId(productId)
+                        .variantId(variantId)
+                        .productName(productName)
+                        .message("Biến thể \"" + variant.getCode() + "\" đã ngừng bán")
+                        .build());
+                hasBlocking = true;
+                continue;
+            }
+
+            // Check stock
+            int currentStock = variant.getStockQuantity() == null ? 0 : variant.getStockQuantity();
+            if (currentStock < item.getQuantity()) {
+                issues.add(CheckoutValidationResponse.ValidationIssue.builder()
+                        .type("OUT_OF_STOCK")
+                        .severity("BLOCKING")
+                        .productId(productId)
+                        .variantId(variantId)
+                        .productName(productName)
+                        .oldValue(BigDecimal.valueOf(item.getQuantity()))
+                        .newValue(BigDecimal.valueOf(Math.max(currentStock, 0)))
+                        .message("Sản phẩm \"" + productName + "\" không đủ tồn kho (yêu cầu: "
+                                + item.getQuantity() + ", còn: " + Math.max(currentStock, 0) + ")")
+                        .build());
+                hasBlocking = true;
+            }
+
+            // Calculate new price from DB
+            ProductPriceResponse price = productPriceService.calculateCurrentPrice(variant);
+            BigDecimal newUnitPrice = defaultZero(price.getUnitPrice());
+            BigDecimal newOriginalPrice = defaultZero(price.getOriginalPrice());
+            BigDecimal lineTotal = newUnitPrice.multiply(BigDecimal.valueOf(item.getQuantity()));
+            newSubtotal = newSubtotal.add(lineTotal);
+
+            latestItems.add(CheckoutQuoteItemResponse.builder()
+                    .productId(productId)
+                    .variantId(variantId)
+                    .productName(productName)
+                    .variantCode(variant.getCode())
+                    .size(extractAttributeValue(variant, "SIZE"))
+                    .color(extractAttributeValue(variant, "COLOR"))
+                    .material(extractAttributeValue(variant, "MATERIAL"))
+                    .imageUrl(resolveImageUrl(variant))
+                    .quantity(item.getQuantity())
+                    .originalPrice(newOriginalPrice)
+                    .unitPrice(newUnitPrice)
+                    .discountPercent(defaultZero(price.getDiscountPercent()))
+                    .promotionId(price.getPromotionId())
+                    .lineTotal(lineTotal)
+                    .build());
+
+            // Compare with old price snapshot
+            CheckoutValidationRequest.OldItemSnapshot oldSnap = oldItemMap.get(variantId);
+            if (oldSnap != null && oldSnap.getUnitPrice() != null) {
+                BigDecimal oldUnitPrice = defaultZero(oldSnap.getUnitPrice());
+                if (newUnitPrice.compareTo(oldUnitPrice) != 0) {
+                    boolean promotionChanged = oldSnap.getPromotionId() != null
+                            ? !oldSnap.getPromotionId().equals(price.getPromotionId())
+                            : price.getPromotionId() != null;
+                    String issueType = promotionChanged ? "PROMOTION_CHANGED" : "PRODUCT_PRICE_CHANGED";
+                    issues.add(CheckoutValidationResponse.ValidationIssue.builder()
+                            .type(issueType)
+                            .severity("REQUIRES_CONFIRMATION")
+                            .productId(productId)
+                            .variantId(variantId)
+                            .productName(productName)
+                            .oldValue(oldUnitPrice)
+                            .newValue(newUnitPrice)
+                            .message("Giá của \"" + productName + "\" đã thay đổi từ "
+                                    + oldUnitPrice.toPlainString() + " → " + newUnitPrice.toPlainString())
+                            .build());
+                    hasRequiresConfirm = true;
+                }
+            }
+        }
+
+        // Validate voucher with fresh data
+        BigDecimal newDiscount = BigDecimal.ZERO;
+        if (StringUtils.hasText(request.getVoucherCode())) {
+            try {
+                ValidateDiscountResponse discountResp = discountService.validateDiscountForSubtotal(
+                        request.getVoucherCode(),
+                        newSubtotal,
+                        userDetails
+                );
+                newDiscount = defaultZero(discountResp.getDiscountAmount());
+
+                // Check if discount amount changed vs old
+                if (request.getOldDiscount() != null) {
+                    BigDecimal oldDiscount = defaultZero(request.getOldDiscount());
+                    if (newDiscount.compareTo(oldDiscount) != 0) {
+                        issues.add(CheckoutValidationResponse.ValidationIssue.builder()
+                                .type("VOUCHER_CHANGED")
+                                .severity("REQUIRES_CONFIRMATION")
+                                .oldValue(oldDiscount)
+                                .newValue(newDiscount)
+                                .message("Giá trị mã giảm giá đã thay đổi từ "
+                                        + oldDiscount.toPlainString() + " → " + newDiscount.toPlainString())
+                                .build());
+                        hasRequiresConfirm = true;
+                    }
+                }
+            } catch (Exception e) {
+                issues.add(CheckoutValidationResponse.ValidationIssue.builder()
+                        .type("VOUCHER_INVALID")
+                        .severity("BLOCKING")
+                        .message(e.getMessage() != null ? e.getMessage() : "Mã giảm giá không còn hợp lệ")
+                        .build());
+                hasBlocking = true;
+            }
+        }
+
+        // Calculate new shipping fee
+        BigDecimal newShippingFee = calculateShippingFee(request.getShippingInfo(), newSubtotal, request.getItems());
+        BigDecimal productRevenue = newSubtotal.subtract(newDiscount).max(BigDecimal.ZERO);
+        BigDecimal newTotal = productRevenue.add(newShippingFee);
+
+        String status;
+        if (hasBlocking) {
+            status = "BLOCKING";
+        } else if (hasRequiresConfirm) {
+            status = "REQUIRES_CONFIRMATION";
+        } else {
+            status = "OK";
+        }
+
+        return CheckoutValidationResponse.builder()
+                .status(status)
+                .issues(issues)
+                .latestItems(latestItems)
+                .oldSubtotal(defaultZero(request.getOldSubtotal()))
+                .newSubtotal(newSubtotal)
+                .oldDiscount(defaultZero(request.getOldDiscount()))
+                .newDiscount(newDiscount)
+                .oldShippingFee(defaultZero(request.getOldShippingFee()))
+                .newShippingFee(newShippingFee)
+                .oldTotal(defaultZero(request.getOldTotal()))
+                .newTotal(newTotal)
+                .build();
     }
 
     private BigDecimal defaultZero(BigDecimal value) {

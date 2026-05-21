@@ -384,7 +384,7 @@ const OrderDetailModal = ({
                 )}
 
                 {order.fullAddress && (
-                  <Descriptions.Item label="Địa chỉ nhận hàng">
+                  <Descriptions.Item label="Địa chỉ ">
                     {order.fullAddress}
                   </Descriptions.Item>
                 )}

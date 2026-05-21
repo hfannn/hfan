@@ -51,6 +51,7 @@ const { RangePicker } = DatePicker;
 
 const DashboardPage = () => {
   const [loading, setLoading] = useState(false);
+  const [activeChartTab, setActiveChartTab] = useState<"revenue" | "status" | "payment">("revenue");
   const [groupBy, setGroupBy] = useState<"day" | "week" | "month">("day");
   const [query, setQuery] = useState<StatisticsQuery>({
     from: dayjs().startOf("month").format("YYYY-MM-DD"),
@@ -383,7 +384,7 @@ const DashboardPage = () => {
       },
     ];
     return (
-      <div style={{ width: "100%", height: 320 }}>
+      <div style={{ width: "100%", height: 400 }}>
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
             <Pie
@@ -391,8 +392,8 @@ const DashboardPage = () => {
               dataKey="value"
               nameKey="name"
               cx="50%"
-              cy="45%"
-              outerRadius={95}
+              cy="44%"
+              outerRadius={130}
               label={({ name, percent }: any) =>
                 `${name}: ${((percent || 0) * 100).toFixed(0)}%`
               }
@@ -434,9 +435,9 @@ const DashboardPage = () => {
     };
 
     return (
-      <div style={{ width: "100%", height: 320 }}>
+      <div style={{ width: "100%", height: 400 }}>
         <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={data} margin={{ top: 8, right: 16, left: 8, bottom: 8 }}>
+          <BarChart data={data} margin={{ top: 8, right: 24, left: 8, bottom: 8 }}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} />
             <XAxis dataKey="name" tick={{ fontSize: 12 }} />
             <YAxis tickFormatter={yTickFormatter} tick={{ fontSize: 12 }} width={56} />
@@ -461,14 +462,6 @@ const DashboardPage = () => {
     [paymentMethodData],
   );
 
-  const transferRevenue = useMemo(
-    () =>
-      paymentMethodData
-        .filter((item) => shortPaymentName(item) === "Chuyển khoản")
-        .reduce((sum, item) => sum + Number(item.revenue || 0), 0),
-    [paymentMethodData],
-  );
-
   const topProductColumns = [
     {
       title: "Top",
@@ -477,7 +470,7 @@ const DashboardPage = () => {
       render: (_: any, __: any, index: number) => index + 1,
     },
     {
-      title: "Mã SP",
+      title: "Mã sản phẩm",
       dataIndex: "productCode",
       key: "productCode",
       render: (value: string) => value || "-",
@@ -683,17 +676,6 @@ const DashboardPage = () => {
           <Col xs={24} sm={12} xl={6}>
             <Card>
               <Statistic
-                title="Doanh thu chuyển khoản"
-                value={transferRevenue}
-                formatter={(value) => formatCurrency(Number(value || 0))}
-                prefix={<SwapOutlined />}
-              />
-            </Card>
-          </Col>
-
-          <Col xs={24} sm={12} xl={6}>
-            <Card>
-              <Statistic
                 title="Sản phẩm đã bán"
                 value={Number(overview.totalProductsSold || 0)}
                 prefix={<ShoppingOutlined />}
@@ -722,32 +704,35 @@ const DashboardPage = () => {
         </Row>
 
         <Row gutter={[16, 16]} style={{ marginTop: 8 }}>
-          <Col xs={24} xl={14}>
-            <Card title="Tỷ trọng doanh thu">
-              {renderRevenueBarChart(
-                revenuePieData,
-                "Không có dữ liệu tỷ trọng doanh thu",
-              )}
-            </Card>
-          </Col>
-
-          <Col xs={24} md={12} xl={5}>
-            <Card title="Trạng thái đơn hàng">
-              {renderPieChart(
-                orderStatusPieData,
-                "Chưa có dữ liệu trạng thái đơn",
-                (value) => `${value} đơn`,
-              )}
-            </Card>
-          </Col>
-
-          <Col xs={24} md={12} xl={5}>
-            <Card title="Tỷ trọng theo thanh toán">
-              {renderPieChart(
-                paymentPieData,
-                "Chưa có dữ liệu thanh toán",
-                formatCurrency,
-              )}
+          <Col xs={24}>
+            <Card
+              tabList={[
+                { key: "revenue", tab: "Tỷ trọng doanh thu" },
+                { key: "status", tab: "Trạng thái đơn hàng" },
+                { key: "payment", tab: "Tỷ trọng theo thanh toán" },
+              ]}
+              activeTabKey={activeChartTab}
+              onTabChange={(key) =>
+                setActiveChartTab(key as "revenue" | "status" | "payment")
+              }
+            >
+              {activeChartTab === "revenue" &&
+                renderRevenueBarChart(
+                  revenuePieData,
+                  "Không có dữ liệu tỷ trọng doanh thu",
+                )}
+              {activeChartTab === "status" &&
+                renderPieChart(
+                  orderStatusPieData,
+                  "Chưa có dữ liệu trạng thái đơn",
+                  (value) => `${value} đơn`,
+                )}
+              {activeChartTab === "payment" &&
+                renderPieChart(
+                  paymentPieData,
+                  "Chưa có dữ liệu thanh toán",
+                  formatCurrency,
+                )}
             </Card>
           </Col>
         </Row>

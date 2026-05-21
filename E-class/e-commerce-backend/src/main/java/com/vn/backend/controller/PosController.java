@@ -74,6 +74,14 @@ public class PosController {
         return ResponseEntity.ok(posService.quickCreateCustomerAndAssign(orderId, request));
     }
 
+    @PostMapping("/orders/{orderId}/validate-checkout")
+    public ResponseEntity<PosCheckoutValidationResponse> validateCheckout(
+            @PathVariable Long orderId,
+            @RequestParam(required = false) Long couponId
+    ) {
+        return ResponseEntity.ok(posService.validateCheckout(orderId, couponId));
+    }
+
     @PostMapping("/orders/{orderId}/checkout/vnpay")
     public ResponseEntity<PosVnpayCreateResponse> createVnpayPayment(
             @PathVariable Long orderId,

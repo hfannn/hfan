@@ -1,7 +1,9 @@
 package com.vn.backend.controller;
 
 import com.vn.backend.dto.request.CheckoutQuoteRequest;
+import com.vn.backend.dto.request.CheckoutValidationRequest;
 import com.vn.backend.dto.response.CheckoutQuoteResponse;
+import com.vn.backend.dto.response.CheckoutValidationResponse;
 import com.vn.backend.security.CustomUserDetails;
 import com.vn.backend.service.CheckoutQuoteService;
 import jakarta.validation.Valid;
@@ -28,5 +30,13 @@ public class CheckoutController {
             @AuthenticationPrincipal CustomUserDetails userDetails
     ) {
         return ResponseEntity.ok(checkoutQuoteService.quote(request, userDetails));
+    }
+
+    @PostMapping("/validate")
+    public ResponseEntity<CheckoutValidationResponse> validate(
+            @Valid @RequestBody CheckoutValidationRequest request,
+            @AuthenticationPrincipal CustomUserDetails userDetails
+    ) {
+        return ResponseEntity.ok(checkoutQuoteService.validateCheckout(request, userDetails));
     }
 }

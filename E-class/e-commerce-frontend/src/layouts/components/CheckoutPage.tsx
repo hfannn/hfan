@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
+  Alert,
   Avatar,
   Button,
   Card,
@@ -31,7 +32,7 @@ import {
 } from "@ant-design/icons";
 import { orderService } from "@/services/order.service";
 import { useAuth } from "@/services/AuthContext";
-import { checkoutService, CheckoutQuoteResponse } from "@/services/checkout.service";
+import { checkoutService, CheckoutQuoteResponse, CheckoutValidationResponse } from "@/services/checkout.service";
 import { userService } from "@/services/userService";
 import { couponService } from "@/services/coupon.service";
 import {
@@ -133,6 +134,10 @@ const CheckoutPage = () => {
   const [quoteError, setQuoteError] = useState("");
 
   const [shippingError, setShippingError] = useState("");
+  const [checkoutValidationResult, setCheckoutValidationResult] = useState<CheckoutValidationResponse | null>(null);
+  const [checkoutValidationModalOpen, setCheckoutValidationModalOpen] = useState(false);
+  const [checkoutValidating, setCheckoutValidating] = useState(false);
+  const [pendingOrderData, setPendingOrderData] = useState<any>(null);
 
   const [addresses, setAddresses] = useState<Address[]>([]);
   const [isAddressModalVisible, setIsAddressModalVisible] = useState(false);
@@ -407,6 +412,22 @@ const CheckoutPage = () => {
     return text.includes("khong du ton") || text.includes("het hang");
   };
 
+  const isItemAvailabilityError = (value?: string) => {
+    const text = String(value || "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase();
+
+    return (
+      text.includes("ngung ban") ||
+      text.includes("ngung hoat dong") ||
+      text.includes("da bi xoa") ||
+      text.includes("het hang") ||
+      text.includes("khong con kha dung") ||
+      text.includes("bien the san pham")
+    );
+  };
+
   const buildQuotePayload = (nextVoucherCode: string | null = appliedVoucher) => {
     const values = form.getFieldsValue([
       "customerName",
@@ -502,7 +523,7 @@ const CheckoutPage = () => {
             setAppliedVoucherInfo(null);
           }
         } else if (options.source === "shipping") {
-          setShippingError("Không thể tính phí vận chuyển");
+          setShippingError(errorMessage);
         } else {
           setQuoteError(errorMessage);
         }
@@ -791,6 +812,10 @@ const CheckoutPage = () => {
         return;
       }
 
+      if (shippingError) {
+        return;
+      }
+
       try {
         const quoteData = await fetchQuote(appliedVoucher, {
           silent: true,
@@ -809,13 +834,13 @@ const CheckoutPage = () => {
           );
         }
       } catch (error: any) {
-        if (appliedVoucher) {
+        const errorMessage =
+          error?.response?.data?.message ||
+          "Mã giảm giá không còn phù hợp với đơn hàng hiện tại.";
+        if (appliedVoucher && isVoucherRelatedError(errorMessage)) {
           setAppliedVoucher(null);
           setAppliedVoucherInfo(null);
-          setVoucherError(
-            error?.response?.data?.message ||
-              "Mã giảm giá không còn phù hợp với đơn hàng hiện tại.",
-          );
+          setVoucherError(errorMessage);
           message.warning(
             "Mã giảm giá không còn phù hợp với đơn hàng hiện tại và đã được bỏ áp dụng.",
           );
@@ -835,6 +860,7 @@ const CheckoutPage = () => {
     selectedProvinceName,
     selectedDistrictName,
     selectedWardName,
+    shippingError,
   ]);
 
   useEffect(() => {
@@ -851,7 +877,8 @@ const CheckoutPage = () => {
       subtotalBeforeVoucher <= 0 ||
       quoteLoading ||
       voucherApplying ||
-      userRemovedVoucher
+      userRemovedVoucher ||
+      Boolean(shippingError)
     ) {
       return;
     }
@@ -883,6 +910,7 @@ const CheckoutPage = () => {
     appliedVoucher,
     manualVoucherSelection,
     voucherOptions,
+    shippingError,
   ]);
 
   useEffect(() => {
@@ -1213,12 +1241,47 @@ const CheckoutPage = () => {
           : undefined,
     };
 
-    if (normalizedValues.paymentMethod === "VNPAY") {
-      await submitOrderAndRedirectVnpay(orderData);
-      return;
-    }
+    setCheckoutValidating(true);
+    try {
+      const validationRes = await checkoutService.validate({
+        items: items.map((item: any) => ({
+          variantId: item.variantId,
+          quantity: item.quantity,
+        })),
+        voucherCode: appliedVoucher || undefined,
+        shippingInfo: orderData.shippingInfo,
+        oldItems: (quote?.items || []).map((item: any) => ({
+          variantId: item.variantId,
+          unitPrice: item.unitPrice,
+          promotionId: item.promotionId ?? null,
+        })),
+        oldSubtotal: quote?.subtotalBeforeVoucher,
+        oldDiscount: quote?.voucherDiscountAmount,
+        oldShippingFee: quote?.shippingFee,
+        oldTotal: quote?.finalTotal,
+      });
+      const vResult = validationRes.data;
 
-    await submitOrder(orderData);
+      if (vResult.status === "OK") {
+        if (normalizedValues.paymentMethod === "VNPAY") {
+          await submitOrderAndRedirectVnpay({ ...orderData, confirmCheckoutChanged: true });
+        } else {
+          await submitOrder({ ...orderData, confirmCheckoutChanged: true });
+        }
+        return;
+      }
+
+      setCheckoutValidationResult(vResult);
+      setPendingOrderData(orderData);
+      setCheckoutValidationModalOpen(true);
+    } catch (error: any) {
+      const errMsg =
+        error?.response?.data?.message ||
+        "Không thể kiểm tra đơn hàng. Vui lòng thử lại.";
+      message.error(errMsg);
+    } finally {
+      setCheckoutValidating(false);
+    }
   };
 
   const submitOrder = async (orderData: any) => {
@@ -1300,6 +1363,30 @@ const CheckoutPage = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleConfirmValidation = async () => {
+    if (!pendingOrderData) return;
+    setCheckoutValidationModalOpen(false);
+    const confirmData = { ...pendingOrderData, confirmCheckoutChanged: true };
+    if (confirmData.paymentMethodCode === "VNPAY") {
+      await submitOrderAndRedirectVnpay(confirmData);
+    } else {
+      await submitOrder(confirmData);
+    }
+  };
+
+  const getIssueTypeLabel = (type: string) => {
+    const labels: Record<string, string> = {
+      PRODUCT_PRICE_CHANGED: "Giá sản phẩm thay đổi",
+      PROMOTION_CHANGED: "Khuyến mãi thay đổi",
+      VOUCHER_CHANGED: "Voucher thay đổi",
+      VOUCHER_INVALID: "Voucher không hợp lệ",
+      OUT_OF_STOCK: "Hết hàng",
+      PRODUCT_INACTIVE: "Sản phẩm ngừng bán",
+      VARIANT_INACTIVE: "Biến thể ngừng bán",
+    };
+    return labels[type] || type;
   };
 
   return (
@@ -1870,6 +1957,15 @@ const CheckoutPage = () => {
                   </Title>
                 </Row>
 
+                {shippingError && isItemAvailabilityError(shippingError) && (
+                  <Alert
+                    type="error"
+                    showIcon
+                    message="Một số sản phẩm không còn khả dụng. Vui lòng quay lại giỏ hàng để cập nhật."
+                    style={{ marginBottom: 12, marginTop: 8 }}
+                  />
+                )}
+
                 <Popconfirm
                   title="Xác nhận đặt hàng?"
                   description="Vui lòng kiểm tra lại thông tin giao hàng và sản phẩm trước khi xác nhận."
@@ -1883,8 +1979,8 @@ const CheckoutPage = () => {
                     block
                     size="large"
                     htmlType="button"
-                    loading={loading}
-                    disabled={isShippingLoading || !!shippingError || total <= 0}
+                    loading={loading || checkoutValidating}
+                    disabled={isShippingLoading || !!shippingError || total <= 0 || checkoutValidating}
                     style={{
                       borderRadius: 12,
                       fontWeight: 700,
@@ -1892,7 +1988,7 @@ const CheckoutPage = () => {
                       marginTop: 24,
                     }}
                   >
-                    {loading ? "Đang xử lý..." : "HOÀN TẤT ĐẶT HÀNG"}
+                    {loading || checkoutValidating ? "Đang xử lý..." : "HOÀN TẤT ĐẶT HÀNG"}
                   </Button>
                 </Popconfirm>
               </Spin>
@@ -1900,6 +1996,113 @@ const CheckoutPage = () => {
           </Col>
         </Row>
       </Form>
+
+      <Modal
+        open={checkoutValidationModalOpen}
+        title={
+          checkoutValidationResult?.status === "BLOCKING"
+            ? "Không thể đặt hàng"
+            : "Có thay đổi trước khi đặt hàng"
+        }
+        onCancel={() => setCheckoutValidationModalOpen(false)}
+        footer={
+          checkoutValidationResult?.status === "BLOCKING"
+            ? [
+                <Button key="close" onClick={() => setCheckoutValidationModalOpen(false)}>
+                  Đóng
+                </Button>,
+              ]
+            : [
+                <Button key="cancel" onClick={() => setCheckoutValidationModalOpen(false)}>
+                  Hủy
+                </Button>,
+                <Button
+                  key="confirm"
+                  type="primary"
+                  danger
+                  loading={loading}
+                  onClick={handleConfirmValidation}
+                >
+                  Xác nhận & Thanh toán
+                </Button>,
+              ]
+        }
+        width={560}
+      >
+        {checkoutValidationResult && (
+          <div>
+            {checkoutValidationResult.status === "BLOCKING" ? (
+              <p style={{ color: "#dc2626", marginBottom: 12 }}>
+                Đơn hàng không thể tiếp tục do các vấn đề nghiêm trọng sau:
+              </p>
+            ) : (
+              <p style={{ marginBottom: 12 }}>
+                Một số thông tin đã thay đổi. Vui lòng xem lại trước khi xác nhận:
+              </p>
+            )}
+
+            <List
+              size="small"
+              dataSource={checkoutValidationResult.issues}
+              renderItem={(issue) => (
+                <List.Item style={{ padding: "6px 0" }}>
+                  <Space align="start">
+                    <Tag color={issue.severity === "BLOCKING" ? "error" : "warning"}>
+                      {getIssueTypeLabel(issue.type)}
+                    </Tag>
+                    <span style={{ fontSize: 13 }}>{issue.message}</span>
+                  </Space>
+                </List.Item>
+              )}
+            />
+
+            {checkoutValidationResult.status === "REQUIRES_CONFIRMATION" && (
+              <div
+                style={{
+                  marginTop: 16,
+                  padding: 12,
+                  background: "#fafafa",
+                  borderRadius: 8,
+                  border: "1px solid #f0f0f0",
+                }}
+              >
+                <Row justify="space-between" style={{ marginBottom: 6 }}>
+                  <Text type="secondary">Tạm tính (cũ → mới)</Text>
+                  <Text>
+                    {formatMoney(checkoutValidationResult.oldSubtotal)} →{" "}
+                    <strong>{formatMoney(checkoutValidationResult.newSubtotal)}</strong>
+                  </Text>
+                </Row>
+                {(checkoutValidationResult.oldDiscount > 0 ||
+                  checkoutValidationResult.newDiscount > 0) && (
+                  <Row justify="space-between" style={{ marginBottom: 6 }}>
+                    <Text type="secondary">Giảm voucher (cũ → mới)</Text>
+                    <Text>
+                      -{formatMoney(checkoutValidationResult.oldDiscount)} →{" "}
+                      <strong>-{formatMoney(checkoutValidationResult.newDiscount)}</strong>
+                    </Text>
+                  </Row>
+                )}
+                <Row justify="space-between" style={{ marginBottom: 6 }}>
+                  <Text type="secondary">Phí vận chuyển (cũ → mới)</Text>
+                  <Text>
+                    {formatMoney(checkoutValidationResult.oldShippingFee)} →{" "}
+                    <strong>{formatMoney(checkoutValidationResult.newShippingFee)}</strong>
+                  </Text>
+                </Row>
+                <Divider style={{ margin: "8px 0" }} />
+                <Row justify="space-between">
+                  <Text strong>Tổng cộng (cũ → mới)</Text>
+                  <Text strong style={{ color: "#dc2626" }}>
+                    {formatMoney(checkoutValidationResult.oldTotal)} →{" "}
+                    {formatMoney(checkoutValidationResult.newTotal)}
+                  </Text>
+                </Row>
+              </div>
+            )}
+          </div>
+        )}
+      </Modal>
 
       <VoucherSelectorModal
         open={voucherPickerOpen}

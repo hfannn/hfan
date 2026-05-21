@@ -27,6 +27,7 @@ import {
 
 import {
   PosAvailableDiscountResponse,
+  PosCheckoutValidationResponse,
   PosOrderItemResponse,
   PosOrderResponse,
   PosProductSearchResponse,
@@ -280,6 +281,19 @@ const PosManagement = () => {
     customerPaid: 0,
     note: "",
   });
+
+  const [validationResult, setValidationResult] =
+    useState<PosCheckoutValidationResponse | null>(null);
+  const [validationModalOpen, setValidationModalOpen] = useState(false);
+  const [validating, setValidating] = useState(false);
+  const [confirmingCheckout, setConfirmingCheckout] = useState(false);
+  const [pendingCheckoutPayload, setPendingCheckoutPayload] = useState<{
+    paymentMethodId: number;
+    customerPaid: number;
+    couponId?: number | null;
+    note?: string;
+    isVnpay: boolean;
+  } | null>(null);
 
   const loadDraftOrders = async () => {
     try {
@@ -677,30 +691,67 @@ const PosManagement = () => {
       return;
     }
 
-    try {
-      const payload = {
-        paymentMethodId: checkoutData.paymentMethodId,
-        customerPaid: isCashPayment ? checkoutData.customerPaid : 0,
-        couponId:
-          selectedDiscount?.voucherType === "COUPON"
-            ? selectedDiscount?.id ?? null
-            : null,
-        note: checkoutData.note,
-      };
+    const couponId =
+      selectedDiscount?.voucherType === "COUPON"
+        ? selectedDiscount?.id ?? null
+        : null;
 
-      if (isVnpayPayment) {
+    const payload = {
+      paymentMethodId: checkoutData.paymentMethodId,
+      customerPaid: isCashPayment ? checkoutData.customerPaid : 0,
+      couponId,
+      note: checkoutData.note,
+      isVnpay: isVnpayPayment,
+    };
+
+    try {
+      setValidating(true);
+      const result = await posService.validateCheckout(selectedOrderId, couponId);
+      setValidationResult(result);
+      setPendingCheckoutPayload(payload);
+
+      if (!result.valid || result.hasChanges || result.issues.length > 0) {
+        setValidationModalOpen(true);
+        return;
+      }
+
+      await executeCheckout(payload);
+    } catch (error: any) {
+      message.error(error?.response?.data?.message || "Không thể kiểm tra hóa đơn");
+    } finally {
+      setValidating(false);
+    }
+  };
+
+  const executeCheckout = async (payload: {
+    paymentMethodId: number;
+    customerPaid: number;
+    couponId?: number | null;
+    note?: string;
+    isVnpay: boolean;
+  }) => {
+    const checkoutPayload = {
+      paymentMethodId: payload.paymentMethodId,
+      customerPaid: payload.customerPaid,
+      couponId: payload.couponId,
+      note: payload.note,
+    };
+
+    try {
+      if (payload.isVnpay) {
         const vnpay = await posService.createVnpayPayment(
-          selectedOrderId,
-          payload,
+          selectedOrderId!,
+          checkoutPayload,
         );
         window.location.href = vnpay.paymentUrl;
         return;
       }
 
-      const data = await posService.checkout(selectedOrderId, payload);
+      const data = await posService.checkout(selectedOrderId!, checkoutPayload);
 
       message.success("Thanh toán tiền mặt thành công");
       setCheckoutOpen(false);
+      setValidationModalOpen(false);
       setSelectedDiscount(null);
       setAvailableDiscounts([]);
       setSelectedOrder(data);
@@ -1546,7 +1597,8 @@ const PosManagement = () => {
           open={checkoutOpen}
           onCancel={() => setCheckoutOpen(false)}
           onOk={handleCheckout}
-          okText="Xác nhận thanh toán"
+          okText="Kiểm tra & Thanh toán"
+          confirmLoading={validating || confirmingCheckout}
         >
           <Space direction="vertical" style={{ width: "100%" }} size={12}>
             <div>
@@ -1636,6 +1688,122 @@ const PosManagement = () => {
               />
             </div>
           </Space>
+        </Modal>
+
+        <Modal
+          title="Kiểm tra hóa đơn trước thanh toán"
+          open={validationModalOpen}
+          onCancel={() => {
+            setValidationModalOpen(false);
+            setPendingCheckoutPayload(null);
+            setValidationResult(null);
+          }}
+          footer={
+            validationResult?.valid
+              ? [
+                  <Button
+                    key="cancel"
+                    disabled={confirmingCheckout}
+                    onClick={() => {
+                      setValidationModalOpen(false);
+                      setPendingCheckoutPayload(null);
+                      setValidationResult(null);
+                    }}
+                  >
+                    Đóng
+                  </Button>,
+                  <Button
+                    key="confirm"
+                    type="primary"
+                    loading={confirmingCheckout}
+                    disabled={confirmingCheckout}
+                    onClick={async () => {
+                      if (!pendingCheckoutPayload || !validationResult || confirmingCheckout) return;
+                      const newFinal = validationResult.finalTotal;
+                      const newCustomerPaid = pendingCheckoutPayload.isVnpay ? 0 : newFinal;
+                      if (!pendingCheckoutPayload.isVnpay) {
+                        setCheckoutData((prev) => ({ ...prev, customerPaid: newFinal }));
+                      }
+                      const updatedPayload = { ...pendingCheckoutPayload, customerPaid: newCustomerPaid };
+                      setValidationModalOpen(false);
+                      setConfirmingCheckout(true);
+                      try {
+                        await executeCheckout(updatedPayload);
+                      } finally {
+                        setConfirmingCheckout(false);
+                        setPendingCheckoutPayload(null);
+                        setValidationResult(null);
+                      }
+                    }}
+                  >
+                    Xác nhận & Thanh toán
+                  </Button>,
+                ]
+              : [
+                  <Button
+                    key="close"
+                    onClick={() => {
+                      setValidationModalOpen(false);
+                      setPendingCheckoutPayload(null);
+                      setValidationResult(null);
+                    }}
+                  >
+                    Đóng
+                  </Button>,
+                ]
+          }
+        >
+          {validationResult && (
+            <Space direction="vertical" style={{ width: "100%" }} size={12}>
+              <Text>{validationResult.message}</Text>
+              {validationResult.issues.map((issue, idx) => (
+                <div
+                  key={idx}
+                  style={{
+                    padding: "8px 12px",
+                    borderRadius: 8,
+                    background: issue.severity === "BLOCKING" ? "#fff1f0" : "#fffbe6",
+                    border: `1px solid ${issue.severity === "BLOCKING" ? "#ffa39e" : "#ffe58f"}`,
+                  }}
+                >
+                  <Tag color={issue.severity === "BLOCKING" ? "red" : "warning"}>
+                    {issue.severity === "BLOCKING" ? "Chặn thanh toán" : "Cần xác nhận"}
+                  </Tag>
+                  <Text>{issue.message}</Text>
+                  {issue.oldPrice != null && issue.newPrice != null && (
+                    <div style={{ marginTop: 4 }}>
+                      <Text type="secondary" style={{ fontSize: 12 }}>
+                        Giá cũ: {currency(issue.oldPrice)} đ → Giá mới:{" "}
+                        <Text strong style={{ color: "#cf1322", fontSize: 12 }}>
+                          {currency(issue.newPrice)} đ
+                        </Text>
+                      </Text>
+                    </div>
+                  )}
+                </div>
+              ))}
+              {validationResult.valid && (
+                <div style={{ marginTop: 8, borderTop: "1px solid #f0f0f0", paddingTop: 8 }}>
+                  <div>
+                    <Text strong>Tổng tiền hàng: </Text>
+                    <Text>{currency(validationResult.newSubtotal)} đ</Text>
+                  </div>
+                  {validationResult.couponDiscount > 0 && (
+                    <div>
+                      <Text strong>Giảm giá: </Text>
+                      <Text type="danger">-{currency(validationResult.couponDiscount)} đ</Text>
+                    </div>
+                  )}
+                  <div>
+                    <Text strong>Cần thanh toán: </Text>
+                    <Text strong style={{ color: "#1677ff" }}>
+                      {currency(validationResult.finalTotal)} đ
+                    </Text>
+                  </div>
+                </div>
+              )}
+            </Space>
+          )}
         </Modal>
       </Space>
     </div>

@@ -189,6 +189,17 @@ const UserManagementPage = () => {
   const normalizeBirthday = (b: any) =>
     b ? (typeof b === "string" ? b : b.format?.("YYYY-MM-DD")) : null;
 
+  const mapApiErrorToField = (msg: string) => {
+    const t = msg
+      .normalize("NFD")
+      .replace(/[̀-ͯ]/g, "")
+      .toLowerCase();
+    if (t.includes("so dien thoai") || t.includes("phone")) return "phone";
+    if (t.includes("username") || t.includes("ten dang nhap")) return "username";
+    if (t.includes("email")) return "email";
+    return null;
+  };
+
   const handleSubmit = async () => {
     try {
       setSubmitting(true);
@@ -224,7 +235,17 @@ const UserManagementPage = () => {
       setEditingUser(null);
       fetchUsers(searchText?.trim() ? searchText.trim() : undefined);
     } catch (error: any) {
-      message.error(error?.response?.data?.message || "Có lỗi xảy ra");
+      // Ant Design form validation rejection — form already shows errors inline
+      if (error?.errorFields) return;
+
+      const msg: string = error?.response?.data?.message || "";
+      const field = msg ? mapApiErrorToField(msg) : null;
+
+      if (field) {
+        form.setFields([{ name: field, errors: [msg] }]);
+      } else {
+        message.error(msg || "Có lỗi xảy ra");
+      }
     } finally {
       setSubmitting(false);
     }

@@ -38,9 +38,11 @@ import com.vn.backend.entity.User;
 import com.vn.backend.repository.CustomerRepository;
 import com.vn.backend.repository.UserRepository;
 import com.vn.backend.dto.response.ValidateDiscountResponse;
+import com.vn.backend.dto.response.ProductPriceResponse;
 import com.vn.backend.exception.InvalidRequestException;
 import com.vn.backend.exception.ResourceNotFoundException;
 import com.vn.backend.service.DiscountService;
+import com.vn.backend.service.ProductPriceService;
 import org.springframework.util.StringUtils;
 
 @Service
@@ -80,6 +82,7 @@ public class VnpayServiceImpl implements com.vn.backend.service.VnpayService {
     private final OrderInventoryService orderInventoryService;
     private final StockReservationService stockReservationService;
     private final DiscountService discountService;
+    private final ProductPriceService productPriceService;
 
 
     @Override
@@ -92,8 +95,10 @@ public class VnpayServiceImpl implements com.vn.backend.service.VnpayService {
                 .orElseThrow(() -> new EntityNotFoundException("Không tìm thấy hóa đơn"));
 
         validateDraftPosOrder(order);
-        recalculateOrderAmounts(order);
         validateOrderHasItems(orderId);
+        List<OrderItem> posItems = orderItemRepository.findByOrder_Id(orderId);
+        refreshPosItemPrices(posItems);
+        recalculateOrderAmounts(order);
 
         AppliedDiscount appliedDiscount = applyDiscount(order, request);
         BigDecimal finalAmount = calculateFinalAmount(order);
@@ -271,6 +276,22 @@ public class VnpayServiceImpl implements com.vn.backend.service.VnpayService {
         if (items.isEmpty()) {
             throw new IllegalArgumentException("Hóa đơn chưa có sản phẩm");
         }
+    }
+
+    private void refreshPosItemPrices(List<OrderItem> items) {
+        for (OrderItem item : items) {
+            com.vn.backend.entity.ProductVariant variant = item.getProductVariant();
+            if (variant == null) continue;
+            ProductPriceResponse price = productPriceService.calculateCurrentPrice(variant);
+            BigDecimal unitPrice = defaultZero(price.getUnitPrice());
+            BigDecimal originalPrice = defaultZero(price.getOriginalPrice());
+            BigDecimal qty = BigDecimal.valueOf(item.getQuantity());
+            item.setPriceAtPurchase(unitPrice);
+            item.setOriginalPriceAtPurchase(originalPrice);
+            item.setLineTotal(unitPrice.multiply(qty));
+            item.setCostPriceAtPurchase(defaultZero(variant.getCostPrice()));
+        }
+        orderItemRepository.saveAll(items);
     }
 
     private void recalculateOrderAmounts(Order order) {
