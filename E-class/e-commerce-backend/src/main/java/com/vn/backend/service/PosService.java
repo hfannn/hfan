@@ -1,6 +1,7 @@
 package com.vn.backend.service;
 
 import com.vn.backend.dto.request.pos.*;
+import com.vn.backend.dto.response.pos.PosCheckoutValidationResponse;
 import com.vn.backend.dto.response.pos.PosOrderResponse;
 import com.vn.backend.dto.response.pos.PosProductSearchResponse;
 import com.vn.backend.dto.response.pos.PosAvailableDiscountResponse;
@@ -34,5 +35,7 @@ public interface PosService {
     List<PosAvailableDiscountResponse> getAvailableDiscounts(Long orderId);
 
     PosOrderResponse quickCreateCustomerAndAssign(Long orderId, PosQuickCreateCustomerRequest request);
+
+    PosCheckoutValidationResponse validateCheckout(Long orderId, Long couponId);
 
 }

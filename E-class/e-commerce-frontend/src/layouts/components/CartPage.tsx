@@ -47,6 +47,9 @@ interface CartItem {
   quantity: number;
   total: number;
   variantId: number;
+  productActive?: boolean | null;
+  variantActive?: boolean | null;
+  stockRemaining?: number | null;
 }
 
 const CartPage = () => {
@@ -96,7 +99,18 @@ const CartPage = () => {
             Number(item.unitPrice ?? item.salePrice ?? item.price ?? 0),
       ),
       variantId: item.variantId,
+      productActive: item.productActive ?? null,
+      variantActive: item.variantActive ?? null,
+      stockRemaining: item.stockRemaining ?? null,
     }));
+
+const getItemError = (item: CartItem): string | null => {
+  if (item.productActive === false) return "Sản phẩm đã ngừng bán";
+  if (item.variantActive === false) return "Biến thể đã ngừng bán";
+  if (item.stockRemaining !== null && item.stockRemaining !== undefined && item.stockRemaining <= 0)
+    return "Sản phẩm đã hết hàng";
+  return null;
+};
 
   const applyCartResponse = (cartData: any) => {
     const items = mapCartItems(cartData?.items || []);
@@ -305,7 +319,11 @@ const CartPage = () => {
             <div className="cart-variant-line">
               {getProductAttributeLabel("MATERIAL")}: <strong>{record.materialName || record.material || "Chưa cập nhật"}</strong>
             </div>
-
+            {getItemError(record) && (
+              <Text type="danger" style={{ fontSize: 12 }}>
+                ⚠ {getItemError(record)}
+              </Text>
+            )}
           </Space>
         </Space>
       ),
@@ -404,9 +422,16 @@ const CartPage = () => {
   );
   const subtotal = selectedItems.reduce((acc, item) => acc + item.total, 0);
 
+  const invalidSelectedItems = selectedItems.filter((item) => getItemError(item) !== null);
+
   const handleCheckout = () => {
     if (selectedItems.length === 0) {
       message.warning("Vui lòng chọn sản phẩm để thanh toán.");
+      return;
+    }
+
+    if (invalidSelectedItems.length > 0) {
+      message.error("Vui lòng bỏ chọn các sản phẩm không hợp lệ trước khi thanh toán.");
       return;
     }
 
@@ -478,12 +503,17 @@ const CartPage = () => {
                   Vui lòng chọn sản phẩm để thanh toán.
                 </Text>
               )}
+              {invalidSelectedItems.length > 0 && (
+                <Text type="danger" style={{ display: "block", marginBottom: 8, fontSize: 13 }}>
+                  ⚠ {invalidSelectedItems.length} sản phẩm không hợp lệ. Bỏ chọn hoặc xóa để tiếp tục.
+                </Text>
+              )}
               <Button
                 type="primary"
                 block
                 size="large"
                 className="cart-checkout-button"
-                disabled={selectedItems.length === 0}
+                disabled={selectedItems.length === 0 || invalidSelectedItems.length > 0}
                 onClick={handleCheckout}
               >
                 Tiến hành thanh toán

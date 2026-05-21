@@ -82,6 +82,29 @@ export interface PosAvailableDiscountResponse {
   isBest?: boolean | null;
 }
 
+export interface PosCheckoutValidationItemIssue {
+  variantId?: number | null;
+  productName?: string | null;
+  variantCode?: string | null;
+  issueType: "PRODUCT_INACTIVE" | "VARIANT_INACTIVE" | "STOCK_INSUFFICIENT" | "PRICE_CHANGED" | "PROMOTION_CHANGED" | "COUPON_INVALID";
+  severity: "BLOCKING" | "REQUIRES_CONFIRMATION";
+  oldPrice?: number | null;
+  newPrice?: number | null;
+  requestedQty?: number | null;
+  availableQty?: number | null;
+  message: string;
+}
+
+export interface PosCheckoutValidationResponse {
+  valid: boolean;
+  hasChanges: boolean;
+  message: string;
+  issues: PosCheckoutValidationItemIssue[];
+  newSubtotal: number;
+  couponDiscount: number;
+  finalTotal: number;
+}
+
 export interface PosCreateOrderRequest {
   employeeId: number;
   customerId?: number | null;
@@ -265,6 +288,18 @@ export const posService = {
     params: Record<string, string>,
   ): Promise<PosVnpayReturnResponse> => {
     const res = await axiosClient.get(`${POS_BASE}/vnpay/return`, { params });
+    return res.data;
+  },
+
+  validateCheckout: async (
+    orderId: number,
+    couponId?: number | null,
+  ): Promise<PosCheckoutValidationResponse> => {
+    const res = await axiosClient.post(
+      `${POS_BASE}/orders/${orderId}/validate-checkout`,
+      null,
+      { params: couponId != null ? { couponId } : {} },
+    );
     return res.data;
   },
 };

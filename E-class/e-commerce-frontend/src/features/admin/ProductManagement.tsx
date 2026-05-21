@@ -509,7 +509,7 @@ const ProductManagementPage = () => {
         ),
     },
     {
-      title: "Mã SP",
+      title: "Mã sản phẩm",
       dataIndex: "code",
       key: "code",
       width: 130,

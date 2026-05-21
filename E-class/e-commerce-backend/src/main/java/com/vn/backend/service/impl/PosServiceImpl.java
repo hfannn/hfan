@@ -7,6 +7,7 @@ import com.vn.backend.dto.request.pos.PosCreateOrderRequest;
 import com.vn.backend.dto.request.pos.PosQuickCreateCustomerRequest;
 import com.vn.backend.dto.request.pos.PosUpdateItemRequest;
 import com.vn.backend.dto.response.pos.PosAvailableDiscountResponse;
+import com.vn.backend.dto.response.pos.PosCheckoutValidationResponse;
 import com.vn.backend.dto.response.pos.PosOrderItemResponse;
 import com.vn.backend.dto.response.pos.PosOrderResponse;
 import com.vn.backend.dto.response.pos.PosProductSearchResponse;
@@ -470,6 +471,7 @@ public class PosServiceImpl implements PosService {
         }
 
         validateReservedDraftItems(items);
+        refreshOrderItemPrices(items);
 
         PaymentMethod paymentMethod = paymentMethodRepository.findById(request.getPaymentMethodId())
                 .orElseThrow(() -> new EntityNotFoundException("Không tìm thấy phương thức thanh toán"));
@@ -1257,6 +1259,187 @@ public class PosServiceImpl implements PosService {
 
         inventoryTransactionRepository.saveAndFlush(transaction);
         entityManager.refresh(variant);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PosCheckoutValidationResponse validateCheckout(Long orderId, Long couponId) {
+        Order order = getDraftOrderOrThrow(orderId);
+        List<OrderItem> items = orderItemRepository.findByOrder_Id(orderId);
+
+        List<PosCheckoutValidationResponse.ItemIssue> issues = new ArrayList<>();
+        boolean hasBlocking = false;
+        boolean hasChanges = false;
+
+        for (OrderItem item : items) {
+            ProductVariant variant = item.getProductVariant();
+            Product product = variant != null ? variant.getProduct() : null;
+
+            if (variant == null || product == null) {
+                issues.add(PosCheckoutValidationResponse.ItemIssue.builder()
+                        .issueType("PRODUCT_INACTIVE")
+                        .severity("BLOCKING")
+                        .message("Sản phẩm trong hóa đơn không còn tồn tại")
+                        .build());
+                hasBlocking = true;
+                continue;
+            }
+
+            String productName = product.getName();
+            String variantCode = variant.getCode();
+            Long variantId = variant.getId();
+
+            if (product.getDeletedAt() != null || !Boolean.TRUE.equals(product.getIsActive())) {
+                issues.add(PosCheckoutValidationResponse.ItemIssue.builder()
+                        .variantId(variantId)
+                        .productName(productName)
+                        .variantCode(variantCode)
+                        .issueType("PRODUCT_INACTIVE")
+                        .severity("BLOCKING")
+                        .message("Sản phẩm \"" + productName + "\" đã ngừng bán")
+                        .build());
+                hasBlocking = true;
+                continue;
+            }
+
+            if (variant.getDeletedAt() != null || !Boolean.TRUE.equals(variant.getIsActive())) {
+                issues.add(PosCheckoutValidationResponse.ItemIssue.builder()
+                        .variantId(variantId)
+                        .productName(productName)
+                        .variantCode(variantCode)
+                        .issueType("VARIANT_INACTIVE")
+                        .severity("BLOCKING")
+                        .message("Biến thể \"" + variantCode + "\" đã ngừng bán")
+                        .build());
+                hasBlocking = true;
+                continue;
+            }
+
+            int currentStock = variant.getStockQuantity() == null ? 0 : variant.getStockQuantity();
+            if (currentStock < 0) {
+                issues.add(PosCheckoutValidationResponse.ItemIssue.builder()
+                        .variantId(variantId)
+                        .productName(productName)
+                        .variantCode(variantCode)
+                        .issueType("STOCK_INSUFFICIENT")
+                        .severity("BLOCKING")
+                        .requestedQty(item.getQuantity())
+                        .availableQty(currentStock)
+                        .message("Tồn kho biến thể \"" + variantCode + "\" không hợp lệ (âm)")
+                        .build());
+                hasBlocking = true;
+                continue;
+            }
+
+            ProductPriceResponse currentPrice = productPriceService.calculateCurrentPrice(variant);
+            BigDecimal currentUnitPrice = defaultZero(currentPrice.getUnitPrice());
+            BigDecimal savedUnitPrice = defaultZero(item.getPriceAtPurchase());
+
+            if (currentUnitPrice.compareTo(savedUnitPrice) != 0) {
+                boolean promotionChanged = item.getPromotionId() != null
+                        ? !item.getPromotionId().equals(currentPrice.getPromotionId())
+                        : currentPrice.getPromotionId() != null;
+
+                String issueType = promotionChanged ? "PROMOTION_CHANGED" : "PRICE_CHANGED";
+                issues.add(PosCheckoutValidationResponse.ItemIssue.builder()
+                        .variantId(variantId)
+                        .productName(productName)
+                        .variantCode(variantCode)
+                        .issueType(issueType)
+                        .severity("REQUIRES_CONFIRMATION")
+                        .oldPrice(savedUnitPrice)
+                        .newPrice(currentUnitPrice)
+                        .requestedQty(item.getQuantity())
+                        .message("Giá của \"" + productName + " - " + variantCode + "\" đã thay đổi từ "
+                                + savedUnitPrice + " → " + currentUnitPrice)
+                        .build());
+                hasChanges = true;
+            }
+        }
+
+        // Calculate newSubtotal using CURRENT prices from DB (not stored draft prices)
+        BigDecimal subtotal = BigDecimal.ZERO;
+        for (OrderItem item : items) {
+            ProductVariant variant = item.getProductVariant();
+            if (variant != null && isSellableVariant(variant)) {
+                ProductPriceResponse freshPrice = productPriceService.calculateCurrentPrice(variant);
+                subtotal = subtotal.add(
+                        defaultZero(freshPrice.getUnitPrice())
+                                .multiply(BigDecimal.valueOf(item.getQuantity()))
+                );
+            }
+        }
+
+        BigDecimal couponDiscount = BigDecimal.ZERO;
+
+        if (couponId != null) {
+            Coupon coupon = couponRepository.findById(couponId).orElse(null);
+            if (coupon == null) {
+                issues.add(PosCheckoutValidationResponse.ItemIssue.builder()
+                        .issueType("COUPON_INVALID")
+                        .severity("BLOCKING")
+                        .message("Mã giảm giá không tồn tại")
+                        .build());
+                hasBlocking = true;
+            } else if (!isCouponApplicable(coupon, order, subtotal)) {
+                long usedCount = couponUsageRepository.countValidUsagesByCouponId(couponId);
+                String reason = getCouponIneligibleReason(coupon, order, subtotal, usedCount);
+                issues.add(PosCheckoutValidationResponse.ItemIssue.builder()
+                        .issueType("COUPON_INVALID")
+                        .severity("BLOCKING")
+                        .message(reason != null ? reason : "Mã giảm giá không còn hợp lệ")
+                        .build());
+                hasBlocking = true;
+            } else {
+                couponDiscount = calculateDiscountAmount(
+                        subtotal,
+                        coupon.getDiscountType(),
+                        coupon.getDiscountValue(),
+                        coupon.getMaxDiscountAmount()
+                );
+            }
+        }
+
+        BigDecimal finalTotal = subtotal.subtract(couponDiscount).max(BigDecimal.ZERO);
+        boolean valid = !hasBlocking;
+
+        String message;
+        if (hasBlocking) {
+            message = "Có vấn đề nghiêm trọng cần xử lý trước khi thanh toán";
+        } else if (hasChanges) {
+            message = "Có thay đổi về giá/khuyến mãi, vui lòng xác nhận trước khi thanh toán";
+        } else {
+            message = "Hóa đơn hợp lệ, có thể thanh toán";
+        }
+
+        return PosCheckoutValidationResponse.builder()
+                .valid(valid)
+                .hasChanges(hasChanges)
+                .message(message)
+                .issues(issues)
+                .newSubtotal(subtotal)
+                .couponDiscount(couponDiscount)
+                .finalTotal(finalTotal)
+                .build();
+    }
+
+    private void refreshOrderItemPrices(List<OrderItem> items) {
+        for (OrderItem item : items) {
+            ProductVariant variant = item.getProductVariant();
+            if (variant == null) continue;
+            ProductPriceResponse price = productPriceService.calculateCurrentPrice(variant);
+            BigDecimal unitPrice = defaultZero(price.getUnitPrice());
+            BigDecimal originalPrice = defaultZero(price.getOriginalPrice());
+            BigDecimal qty = BigDecimal.valueOf(item.getQuantity());
+            item.setPriceAtPurchase(unitPrice);
+            item.setOriginalPriceAtPurchase(originalPrice);
+            item.setProductDiscountPercent(defaultZero(price.getDiscountPercent()));
+            item.setProductDiscountAmount(originalPrice.subtract(unitPrice).multiply(qty));
+            item.setPromotionId(price.getPromotionId());
+            item.setLineTotal(unitPrice.multiply(qty));
+            item.setCostPriceAtPurchase(defaultZero(variant.getCostPrice()));
+        }
+        orderItemRepository.saveAll(items);
     }
 
     @Scheduled(cron = "0 59 23 * * ?")

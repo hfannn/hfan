@@ -261,12 +261,13 @@ public class ProductVariantServiceImpl implements ProductVariantService {
         validateNoDuplicateAttributeType(attributeValues);
         validateDuplicateCombination(variant.getProduct().getId(), attributeValues, variant.getId());
 
-        variantAttributeValueRepository.deleteByVariantId(variant.getId());
-
-        if (variant.getVariantAttributeValues() != null) {
+        if (variant.getVariantAttributeValues() == null) {
+            variant.setVariantAttributeValues(new ArrayList<>());
+        } else {
             variant.getVariantAttributeValues().clear();
         }
 
+        // Flush deletions first so composite key constraints don't conflict on re-insert
         productVariantRepository.saveAndFlush(variant);
 
         for (AttributeValue av : attributeValues) {
@@ -274,7 +275,7 @@ public class ProductVariantServiceImpl implements ProductVariantService {
             link.setId(new VariantAttributeValueId(variant.getId(), av.getId()));
             link.setVariant(variant);
             link.setAttributeValue(av);
-            variantAttributeValueRepository.saveAndFlush(link);
+            variant.getVariantAttributeValues().add(link);
         }
     }
 

@@ -30,4 +30,7 @@ public class PlaceOrderRequest {
 
     private Boolean confirmVoucherChanged;
 
+    /** When true, skip all price/voucher change confirmation checks and proceed with latest DB prices */
+    private Boolean confirmCheckoutChanged;
+
 }

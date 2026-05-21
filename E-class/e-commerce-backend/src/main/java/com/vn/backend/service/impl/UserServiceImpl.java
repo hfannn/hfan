@@ -7,11 +7,13 @@ import com.vn.backend.dto.response.PageResponse;
 import com.vn.backend.dto.response.UserDetailResponse;
 import com.vn.backend.dto.response.UserListResponse;
 import com.vn.backend.dto.response.UserResponse;
+import com.vn.backend.entity.Customer;
 import com.vn.backend.entity.Employee;
 import com.vn.backend.entity.Role;
 import com.vn.backend.entity.User;
 import com.vn.backend.entity.UserProfile;
 import com.vn.backend.mapper.PageMapper;
+import com.vn.backend.repository.CustomerRepository;
 import com.vn.backend.repository.EmployeeRepository;
 import com.vn.backend.repository.RoleRepository;
 import com.vn.backend.repository.UserProfileRepository;
@@ -39,6 +41,7 @@ public class UserServiceImpl implements UserService {
     private final UserRepository userRepository;
     private final UserProfileRepository profileRepository;
     private final EmployeeRepository employeeRepository;
+    private final CustomerRepository customerRepository;
     private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
 
@@ -102,14 +105,23 @@ public class UserServiceImpl implements UserService {
 
         userRepository.save(user);
 
-        Employee employee = new Employee();
-        employee.setUserProfile(profile);
-        employee.setCode(generateEmployeeCode());
-        employee.setRole(role);
-        employee.setSalary(salary);
-        employee.setIsActive(true);
-
-        employeeRepository.save(employee);
+        if ("CUSTOMER".equalsIgnoreCase(role.getCode())) {
+            Customer customer = Customer.builder()
+                    .userProfile(profile)
+                    .code(generateCustomerCode())
+                    .loyaltyPoints(0)
+                    .customerType("RETAIL")
+                    .build();
+            customerRepository.save(customer);
+        } else {
+            Employee employee = new Employee();
+            employee.setUserProfile(profile);
+            employee.setCode(generateEmployeeCode());
+            employee.setRole(role);
+            employee.setSalary(salary);
+            employee.setIsActive(true);
+            employeeRepository.save(employee);
+        }
     }
 
 
@@ -250,5 +262,16 @@ public class UserServiceImpl implements UserService {
         number++;
 
         return String.format("NV%05d", number);
+    }
+
+    private String generateCustomerCode() {
+        return customerRepository.findTopByOrderByIdDesc()
+                .map(Customer::getCode)
+                .map(code -> {
+                    String numberPart = code.replaceAll("\\D+", "");
+                    int number = numberPart.isBlank() ? 0 : Integer.parseInt(numberPart);
+                    return String.format("KH%04d", number + 1);
+                })
+                .orElse("KH0001");
     }
 }

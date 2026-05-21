@@ -36,4 +36,6 @@ public class CartItemResponse {
     private BigDecimal subTotal;
     private BigDecimal lineTotal;
     private String imageUrl;
+    private Boolean productActive;
+    private Boolean variantActive;
 }

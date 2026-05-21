@@ -188,9 +188,12 @@ public class OrderServiceImpl implements OrderService {
             ));
         }
 
-        if (StringUtils.hasText(request.getVoucherCode())
-                && request.getPreviewDiscountAmount() != null
-                && !Boolean.TRUE.equals(request.getConfirmVoucherChanged())) {
+        boolean skipChangeChecks = Boolean.TRUE.equals(request.getConfirmCheckoutChanged())
+                || Boolean.TRUE.equals(request.getConfirmVoucherChanged());
+
+        if (!skipChangeChecks
+                && StringUtils.hasText(request.getVoucherCode())
+                && request.getPreviewDiscountAmount() != null) {
             BigDecimal newDiscount = defaultZero(quote.getVoucherDiscountAmount());
             BigDecimal oldDiscount = defaultZero(request.getPreviewDiscountAmount());
             if (newDiscount.compareTo(oldDiscount) != 0) {

@@ -291,6 +291,10 @@ public class CartServiceImpl implements CartService {
             itemResp.setSubTotal(subTotal);
             itemResp.setLineTotal(subTotal);
             itemResp.setImageUrl(imageUrl);
+            itemResp.setVariantActive(Boolean.TRUE.equals(variant.getIsActive()) && variant.getDeletedAt() == null);
+            itemResp.setProductActive(variant.getProduct() != null
+                    && Boolean.TRUE.equals(variant.getProduct().getIsActive())
+                    && variant.getProduct().getDeletedAt() == null);
 
             originalSubtotal = originalSubtotal.add(itemOriginalSubtotal);
             productDiscountTotal = productDiscountTotal.add(itemOriginalSubtotal.subtract(subTotal));
