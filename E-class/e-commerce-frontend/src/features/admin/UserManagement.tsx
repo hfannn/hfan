@@ -32,17 +32,24 @@ const { Content } = Layout;
 const { Text } = Typography;
 
 const ROLE_FILTER_OPTIONS = [
-  { value: "ADMIN", label: "Quản trị viên" },
-  { value: "USER", label: "Người dùng" },
+  { value: "STAFF", label: "Nhân viên" },
+  { value: "CUSTOMER", label: "Khách hàng" },
 ];
 
 const toDisplayRole = (roleCode: string): string => {
-  if (!roleCode) return "Người dùng";
-  return roleCode.toUpperCase() === "ADMIN" ? "Quản trị viên" : "Người dùng";
+  if (!roleCode) return "Khách hàng";
+  const code = roleCode.toUpperCase();
+  if (code === "ADMIN") return "Quản trị viên";
+  if (code === "STAFF") return "Nhân viên";
+  return "Khách hàng";
 };
 
-const toRoleTagColor = (roleCode: string): string =>
-  roleCode?.toUpperCase() === "ADMIN" ? "red" : "blue";
+const toRoleTagColor = (roleCode: string): string => {
+  const code = roleCode?.toUpperCase();
+  if (code === "ADMIN") return "red";
+  if (code === "STAFF") return "orange";
+  return "blue";
+};
 
 const UserManagementPage = () => {
   const [users, setUsers] = useState<User[]>([]);
@@ -104,29 +111,33 @@ const UserManagementPage = () => {
     fetchUsers(searchText?.trim() ? searchText.trim() : undefined);
   }, [page, size]);
 
-  // Client-side role filter: ADMIN → exact match, USER → all non-ADMIN
+  // Always exclude ADMIN accounts from this screen, then apply role filter
   const filteredUsers = useMemo(() => {
-    if (!roleFilter) return users;
-    if (roleFilter === "ADMIN") return users.filter((u) => u.role?.toUpperCase() === "ADMIN");
-    if (roleFilter === "USER") return users.filter((u) => u.role?.toUpperCase() !== "ADMIN");
-    return users;
+    const nonAdmin = users.filter((u) => u.role?.toUpperCase() !== "ADMIN");
+    if (!roleFilter) return nonAdmin;
+    if (roleFilter === "STAFF") return nonAdmin.filter((u) => u.role?.toUpperCase() === "STAFF");
+    if (roleFilter === "CUSTOMER") return nonAdmin.filter((u) => u.role?.toUpperCase() !== "STAFF");
+    return nonAdmin;
   }, [users, roleFilter]);
 
-  // Form role options: show only ADMIN and the first non-ADMIN role (CUSTOMER preferred)
+  // Form role options: STAFF and CUSTOMER only — ADMIN never shown here
   const formRoleOptions = useMemo(() => {
-    const adminRole = roles.find((r: any) => r.code?.toUpperCase() === "ADMIN");
-    const userRole =
+    const staffRole = roles.find((r: any) => r.code?.toUpperCase() === "STAFF");
+    const customerRole =
       roles.find((r: any) => r.code?.toUpperCase() === "CUSTOMER") ||
-      roles.find((r: any) => r.code?.toUpperCase() !== "ADMIN");
+      roles.find(
+        (r: any) =>
+          r.code?.toUpperCase() !== "ADMIN" && r.code?.toUpperCase() !== "STAFF",
+      );
     const opts: { value: number; label: string }[] = [];
-    if (adminRole) opts.push({ value: adminRole.id, label: "Quản trị viên" });
-    if (userRole) opts.push({ value: userRole.id, label: "Người dùng" });
+    if (staffRole) opts.push({ value: staffRole.id, label: "Nhân viên" });
+    if (customerRole) opts.push({ value: customerRole.id, label: "Khách hàng" });
     return opts;
   }, [roles]);
 
   const getRoleDisplayByRoleId = (roleId: number) => {
     const role = roles.find((r: any) => r.id === roleId);
-    return role?.code?.toUpperCase() === "ADMIN" ? "Quản trị viên" : "Người dùng";
+    return toDisplayRole(role?.code || "");
   };
 
   const handleStatusChange = async (id: number, isActive: boolean) => {
@@ -578,11 +589,9 @@ const UserManagementPage = () => {
                   </Descriptions.Item>
                   <Descriptions.Item label="Vai trò">
                     <Tag
-                      color={
-                        getRoleDisplayByRoleId(detailData.roleId) === "Quản trị viên"
-                          ? "red"
-                          : "blue"
-                      }
+                      color={toRoleTagColor(
+                        roles.find((r: any) => r.id === detailData.roleId)?.code || "",
+                      )}
                     >
                       {getRoleDisplayByRoleId(detailData.roleId) || "—"}
                     </Tag>

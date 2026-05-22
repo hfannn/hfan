@@ -38,6 +38,7 @@ public class SecurityConfig {
 
                 .authorizeHttpRequests(auth -> auth
 
+                        // Public
                         .requestMatchers("/v1/auth/**", "/uploads/**", "/image/**", "/v1/chatbot/**").permitAll()
                         .requestMatchers(HttpMethod.GET,
                                 "/v1/home/**",
@@ -54,34 +55,29 @@ public class SecurityConfig {
                                 "/v1/products/*/reviews"
                         ).permitAll()
 
+                        // Review: any authenticated user
                         .requestMatchers(HttpMethod.POST, "/v1/order-items/*/reviews")
                         .authenticated()
 
-
+                        // Cart: CUSTOMER or ADMIN
                         .requestMatchers("/v1/cart/**")
-                        .hasAnyRole("CUSTOMER","ADMIN")
+                        .hasAnyRole("CUSTOMER", "ADMIN")
 
+                        // Customer order placement
                         .requestMatchers(HttpMethod.POST, "/v1/orders")
                         .hasAnyRole("CUSTOMER", "ADMIN")
 
                         .requestMatchers(HttpMethod.POST, "/v1/orders/*/vnpay")
                         .hasAnyRole("CUSTOMER", "ADMIN")
 
-                        .requestMatchers(HttpMethod.GET, "/v1/orders/my-orders")
-                        .hasAnyRole("CUSTOMER", "ADMIN")
-
-                        .requestMatchers(HttpMethod.GET, "/v1/orders/*")
-                        .hasAnyRole("CUSTOMER", "ADMIN")
-
-                        .requestMatchers(HttpMethod.GET, "/v1/orders/shipping-addresses")
-                        .hasAnyRole("CUSTOMER", "ADMIN")
-
+                        // VNPay callbacks: public
                         .requestMatchers(HttpMethod.GET, "/v1/orders/vnpay/return")
                         .permitAll()
 
                         .requestMatchers(HttpMethod.GET, "/v1/orders/vnpay/ipn")
                         .permitAll()
 
+                        // Customer order actions
                         .requestMatchers(HttpMethod.PUT, "/v1/orders/*/cancel")
                         .hasAnyRole("CUSTOMER", "ADMIN")
 
@@ -91,6 +87,11 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.PATCH, "/v1/orders/*/return-review")
                         .hasRole("ADMIN")
 
+                        // Order read: CUSTOMER, ADMIN, STAFF
+                        .requestMatchers(HttpMethod.GET, "/v1/orders/**")
+                        .hasAnyRole("CUSTOMER", "ADMIN", "STAFF")
+
+                        // Coupons & profile: any authenticated
                         .requestMatchers(HttpMethod.GET, "/v1/coupons/my-coupons")
                         .authenticated()
 
@@ -100,6 +101,19 @@ public class SecurityConfig {
                         .requestMatchers("/v1/profile/me")
                         .authenticated()
 
+                        // POS: ADMIN or STAFF
+                        .requestMatchers("/v1/pos/**")
+                        .hasAnyRole("ADMIN", "STAFF")
+
+                        // Statistics: ADMIN only
+                        .requestMatchers("/v1/statistics/**")
+                        .hasRole("ADMIN")
+
+                        // Product variant & image GET: ADMIN or STAFF (product GET is public above)
+                        .requestMatchers(HttpMethod.GET, "/v1/product-variants/**", "/v1/product-images/**")
+                        .hasAnyRole("ADMIN", "STAFF")
+
+                        // Admin-only resources
                         .requestMatchers("/v1/admin/**").hasRole("ADMIN")
 
                         .requestMatchers("/v1/users/**", "/v1/roles/**")
@@ -109,7 +123,7 @@ public class SecurityConfig {
                                 "/v1/products/**",
                                 "/v1/product-variants/**",
                                 "/v1/product-images/**"
-                        ).hasAnyRole("ADMIN", "INVENTORY", "STAFF")
+                        ).hasRole("ADMIN")
 
                         .requestMatchers("/v1/brands/**",
                                 "/v1/categories/**",
@@ -121,6 +135,10 @@ public class SecurityConfig {
                                 "/v1/attribute-values/**",
                                 "/v1/colors/**")
                         .hasRole("ADMIN")
+
+                        // Payment method read: ADMIN or STAFF (POS checkout)
+                        .requestMatchers(HttpMethod.GET, "/v1/payment-methods", "/v1/payment-methods/**")
+                        .hasAnyRole("ADMIN", "STAFF")
 
                         .requestMatchers("/v1/payments/**",
                                 "/v1/payment-methods/**")

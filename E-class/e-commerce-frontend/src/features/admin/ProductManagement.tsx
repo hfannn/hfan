@@ -27,6 +27,7 @@ import {
 import { Key, useEffect, useMemo, useState } from "react";
 import AddProductForm from "@/layouts/components/AddProductForm";
 import { API_BASE_URL } from "@/services/axiosClient";
+import { useAuth } from "@/services/AuthContext";
 import {
   productService,
   ProductUpdatePayload,
@@ -90,6 +91,9 @@ const { Title, Text } = Typography;
 const { Search } = Input;
 
 const ProductManagementPage = () => {
+  const { user } = useAuth();
+  const isStaff = String(user?.role || "").toUpperCase() === "STAFF";
+
   const [products, setProducts] = useState<ProductListWithVariants[]>([]);
   const [loading, setLoading] = useState(false);
   const [categories, setCategories] = useState<FilterOption[]>([]);
@@ -604,22 +608,26 @@ const ProductManagementPage = () => {
             />
           </Tooltip>
 
-          <Tooltip title="Sửa sản phẩm">
-            <Button
-              icon={<EditOutlined />}
-              onClick={() => handleOpenEditProduct(record)}
-            />
-          </Tooltip>
+          {!isStaff && (
+            <Tooltip title="Sửa sản phẩm">
+              <Button
+                icon={<EditOutlined />}
+                onClick={() => handleOpenEditProduct(record)}
+              />
+            </Tooltip>
+          )}
 
-          <Popconfirm
-            title="Xóa sản phẩm"
-            description="Bạn có chắc muốn xóa sản phẩm này?"
-            okText="Xóa"
-            cancelText="Hủy"
-            onConfirm={() => handleDeleteProduct(record.id)}
-          >
-            <Button danger icon={<DeleteOutlined />} />
-          </Popconfirm>
+          {!isStaff && (
+            <Popconfirm
+              title="Xóa sản phẩm"
+              description="Bạn có chắc muốn xóa sản phẩm này?"
+              okText="Xóa"
+              cancelText="Hủy"
+              onConfirm={() => handleDeleteProduct(record.id)}
+            >
+              <Button danger icon={<DeleteOutlined />} />
+            </Popconfirm>
+          )}
         </Space>
       ),
     },
@@ -636,13 +644,15 @@ const ProductManagementPage = () => {
 
           </Space>
 
-          <Button
-            type="primary"
-            icon={<PlusOutlined />}
-            onClick={() => setIsModalOpen(true)}
-          >
-            Thêm sản phẩm
-          </Button>
+          {!isStaff && (
+            <Button
+              type="primary"
+              icon={<PlusOutlined />}
+              onClick={() => setIsModalOpen(true)}
+            >
+              Thêm sản phẩm
+            </Button>
+          )}
         </Space>
 
         <Card size="small" style={{ borderRadius: 8 }}>
@@ -814,6 +824,7 @@ const ProductManagementPage = () => {
         onDelete={handleDeleteVariant}
         onAddVariant={handleAddVariant}
         refreshKey={variantDetailRefreshKey}
+        readOnly={isStaff}
       />
 
       <EditProductModal

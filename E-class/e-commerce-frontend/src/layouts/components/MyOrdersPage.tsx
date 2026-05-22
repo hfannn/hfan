@@ -223,7 +223,8 @@ const MyOrdersPage = ({
               Thanh toán lại
             </Button>
           )}
-          {normalizeStatus(record.status) === "PENDING" && (
+          {normalizeStatus(record.status) === "PENDING" &&
+            !(record.paymentMethodCode === "VNPAY" && record.paymentStatus === "PAID") && (
             <Popconfirm
               title="Bạn chắc chắn muốn hủy đơn hàng này?"
               description="Hành động này không thể hoàn tác."

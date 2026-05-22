@@ -1555,7 +1555,6 @@ const CheckoutPage = () => {
                   <Form.Item
                     name="address"
                     label="Địa chỉ chi tiết"
-                    normalize={(value) => trimText(value)}
                     rules={[
                       {
                         required: true,

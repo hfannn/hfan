@@ -24,6 +24,7 @@ public class OrderInventoryService {
 
     private final ProductVariantRepository productVariantRepository;
     private final InventoryTransactionRepository inventoryTransactionRepository;
+    private final StockReservationService stockReservationService;
 
     @Transactional
     public void reserveStockForOnlineOrder(Order order) {
@@ -147,11 +148,13 @@ public class OrderInventoryService {
                 throw new InvalidRequestException("Số lượng sản phẩm phải lớn hơn 0");
             }
 
-            if (currentStock < quantity) {
+            int availableStock = stockReservationService.getAvailableStock(variant);
+            if (availableStock < quantity) {
                 String productName = variant.getProduct() != null ? variant.getProduct().getName() : "";
                 throw new InvalidRequestException(
-                        "Sản phẩm " + productName + " - " + variant.getCode()
-                        + " không đủ tồn kho. Cần: " + quantity + ", còn: " + currentStock);
+                        "Không đủ tồn kho khả dụng. Sản phẩm đang được giữ bởi đơn thanh toán online khác: "
+                        + productName + " - " + variant.getCode()
+                        + ". Khả dụng: " + availableStock + ", cần: " + quantity);
             }
 
             variant.setStockQuantity(currentStock - quantity);

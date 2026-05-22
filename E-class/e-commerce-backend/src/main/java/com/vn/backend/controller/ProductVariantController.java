@@ -8,6 +8,7 @@ import com.vn.backend.service.ProductVariantService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -20,6 +21,7 @@ public class ProductVariantController {
 
     private final ProductVariantService productVariantService;
 
+    @PreAuthorize("hasRole('ADMIN')")
     @PostMapping
     public ResponseEntity<ProductVariantResponse> create(
             @RequestBody @Valid ProductVariantCreateRequest request
@@ -27,6 +29,7 @@ public class ProductVariantController {
         return ResponseEntity.ok(productVariantService.create(request));
     }
 
+    @PreAuthorize("hasRole('ADMIN')")
     @PostMapping("/bulk")
     public ResponseEntity<List<ProductVariantResponse>> createBulk(
             @RequestBody @Valid VariantBulkRequest request
@@ -39,6 +42,7 @@ public class ProductVariantController {
         return ResponseEntity.ok(productVariantService.getByProductId(productId));
     }
 
+    @PreAuthorize("hasRole('ADMIN')")
     @PutMapping("/{id}")
     public ResponseEntity<ProductVariantResponse> updateVariant(
             @PathVariable Long id,
@@ -47,6 +51,7 @@ public class ProductVariantController {
         return ResponseEntity.ok(productVariantService.update(id, request));
     }
 
+    @PreAuthorize("hasRole('ADMIN')")
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteVariant(@PathVariable Long id) {
         productVariantService.delete(id);

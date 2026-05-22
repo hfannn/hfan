@@ -24,10 +24,16 @@ const AdminLayout = () => {
   const token = localStorage.getItem("token");
   const storedUser = localStorage.getItem("user");
   const currentUser = user || (storedUser ? safeParseUser(storedUser) : null);
-  const isAdmin = String(currentUser?.role || "").toUpperCase() === "ADMIN";
+  const role = String(currentUser?.role || "").toUpperCase();
+  const isAdmin = role === "ADMIN";
+  const isStaff = role === "STAFF";
 
-  if (!token || !isAdmin) {
+  if (!token || (!isAdmin && !isStaff)) {
     return <Navigate to="/admin/login" replace state={{ from: location }} />;
+  }
+
+  if (isStaff && location.pathname === "/admin") {
+    return <Navigate to="/admin/pos" replace />;
   }
 
   const handleLogout = () => {
@@ -87,92 +93,131 @@ const AdminLayout = () => {
             },
           }}
           location={location}
-          menuDataRender={() => [
-            {
-              key: "/admin",
-              path: "/admin",
-              name: "Dashboard",
-              icon: <DashboardOutlined />,
-            },
-            {
-              key: "/admin/users",
-              path: "/admin/users",
-              name: "Tài khoản hệ thống",
-              icon: <UserOutlined />,
-            },
-            {
-              key: "/admin/pos",
-              path: "/admin/pos",
-              name: "Bán hàng POS",
-              icon: <ShopOutlined />,
-            },
-            {
-              key: "product-management",
-              name: "Sản phẩm",
-              icon: <AppstoreOutlined />,
-              children: [
-                {
-                  key: "/admin/products",
-                  path: "/admin/products",
-                  name: "Danh sách sản phẩm",
-                },
-                {
-                  key: "/admin/brands",
-                  path: "/admin/brands",
-                  name: "Thương hiệu",
-                },
-                {
-                  key: "/admin/categories",
-                  path: "/admin/categories",
-                  name: "Danh mục",
-                },
-                {
-                  key: "/admin/attributes/colors",
-                  path: "/admin/attributes/colors",
-                  name: "Màu sắc",
-                },
-                {
-                  key: "/admin/attributes/sizes",
-                  path: "/admin/attributes/sizes",
-                  name: "Kích cỡ",
-                },
-                {
-                  key: "/admin/attributes/materials",
-                  path: "/admin/attributes/materials",
-                  name: "Chất liệu",
-                },
-              ],
-            },
-            {
-              key: "/admin/orders",
-              path: "/admin/orders",
-              name: "Hóa đơn",
-              icon: <SolutionOutlined />,
-            },
-            {
-              key: "/admin/reviews",
-              path: "/admin/reviews",
-              name: "Đánh giá",
-              icon: <StarOutlined />,
-            },
-            {
-              key: "/admin/discounts",
-              name: "Khuyến mãi",
-              icon: <TagsOutlined />,
-              children: [
-                {
-                  key: "/admin/discounts/promotions",
-                  path: "/admin/discounts/promotions",
-                  name: "Khuyến mãi sản phẩm",
-                },
-                {
-                  key: "/admin/discounts/coupons",
-                  path: "/admin/discounts/coupons",
-                  name: "Mã giảm giá",
-                },
-              ],
-            },
-          ]}
+          menuDataRender={() =>
+            isStaff
+              ? [
+                  {
+                    key: "/admin/pos",
+                    path: "/admin/pos",
+                    name: "Bán hàng POS",
+                    icon: <ShopOutlined />,
+                  },
+                  {
+                    key: "/admin/orders",
+                    path: "/admin/orders",
+                    name: "Hóa đơn",
+                    icon: <SolutionOutlined />,
+                  },
+                  {
+                    key: "product-management",
+                    name: "Sản phẩm",
+                    icon: <AppstoreOutlined />,
+                    children: [
+                      {
+                        key: "/admin/products",
+                        path: "/admin/products",
+                        name: "Danh sách sản phẩm",
+                      },
+                    ],
+                  },
+                ]
+              : [
+                  {
+                    key: "/admin",
+                    path: "/admin",
+                    name: "Dashboard",
+                    icon: <DashboardOutlined />,
+                  },
+                  {
+                    key: "/admin/users",
+                    path: "/admin/users",
+                    name: "Tài khoản hệ thống",
+                    icon: <UserOutlined />,
+                  },
+                  {
+                    key: "/admin/pos",
+                    path: "/admin/pos",
+                    name: "Bán hàng POS",
+                    icon: <ShopOutlined />,
+                  },
+                  {
+                    key: "product-management",
+                    name: "Sản phẩm",
+                    icon: <AppstoreOutlined />,
+                    children: [
+                      {
+                        key: "/admin/products",
+                        path: "/admin/products",
+                        name: "Danh sách sản phẩm",
+                      },
+                      {
+                        key: "/admin/brands",
+                        path: "/admin/brands",
+                        name: "Thương hiệu",
+                      },
+                      {
+                        key: "/admin/categories",
+                        path: "/admin/categories",
+                        name: "Danh mục",
+                      },
+                      {
+                        key: "/admin/attributes/colors",
+                        path: "/admin/attributes/colors",
+                        name: "Màu sắc",
+                      },
+                      {
+                        key: "/admin/attributes/sizes",
+                        path: "/admin/attributes/sizes",
+                        name: "Kích cỡ",
+                      },
+                      {
+                        key: "/admin/attributes/materials",
+                        path: "/admin/attributes/materials",
+                        name: "Chất liệu",
+                      },
+                      {
+                        key: "/admin/origins",
+                        path: "/admin/origins",
+                        name: "Xuất xứ",
+                      },
+                      {
+                        key: "/admin/suppliers",
+                        path: "/admin/suppliers",
+                        name: "Nhà cung cấp",
+                      },
+                    ],
+                  },
+                  {
+                    key: "/admin/orders",
+                    path: "/admin/orders",
+                    name: "Hóa đơn",
+                    icon: <SolutionOutlined />,
+                  },
+                  {
+                    key: "/admin/reviews",
+                    path: "/admin/reviews",
+                    name: "Đánh giá",
+                    icon: <StarOutlined />,
+                  },
+                  {
+                    key: "/admin/discounts",
+                    name: "Khuyến mãi",
+                    icon: <TagsOutlined />,
+                    children: [
+                      {
+                        key: "/admin/discounts/promotions",
+                        path: "/admin/discounts/promotions",
+                        name: "Khuyến mãi sản phẩm",
+                      },
+                      {
+                        key: "/admin/discounts/coupons",
+                        path: "/admin/discounts/coupons",
+                        name: "Mã giảm giá",
+                      },
+                    ],
+                  },
+                ]
+          }
           menuItemRender={(menuItemProps, defaultDom) => {
             if (menuItemProps.isUrl || !menuItemProps.path) {
               return defaultDom;

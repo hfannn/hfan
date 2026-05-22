@@ -1,11 +1,18 @@
 package com.vn.backend.controller;
+
 import com.vn.backend.entity.Origin;
+import com.vn.backend.exception.ResourceNotFoundException;
 import com.vn.backend.repository.OriginRepository;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.OffsetDateTime;
 import java.util.List;
+
 @RestController
 @RequestMapping("/v1/origins")
 @CrossOrigin(origins = "http://localhost:5173")
@@ -20,11 +27,34 @@ public class OriginController {
     }
 
     @PostMapping
-    public Origin create(@RequestBody @Valid Origin origin) {
-        origin.setId(null);
+    public Origin create(@RequestBody @Valid OriginRequest req) {
+        Origin origin = new Origin();
+        origin.setName(req.name().trim());
         origin.setIsActive(true);
         return originRepository.save(origin);
     }
 
+    @PutMapping("/{id}")
+    public Origin update(@PathVariable Long id, @RequestBody @Valid OriginRequest req) {
+        Origin origin = originRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy xuất xứ"));
+        origin.setName(req.name().trim());
+        return originRepository.save(origin);
+    }
 
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> delete(@PathVariable Long id) {
+        Origin origin = originRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy xuất xứ"));
+        origin.setIsActive(false);
+        origin.setDeletedAt(OffsetDateTime.now());
+        originRepository.save(origin);
+        return ResponseEntity.noContent().build();
+    }
+
+    record OriginRequest(
+            @NotBlank(message = "Tên xuất xứ không được để trống")
+            @Size(max = 255, message = "Tên tối đa 255 ký tự")
+            String name
+    ) {}
 }

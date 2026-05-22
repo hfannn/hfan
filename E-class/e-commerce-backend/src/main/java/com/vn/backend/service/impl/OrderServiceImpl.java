@@ -159,10 +159,10 @@ public class OrderServiceImpl implements OrderService {
 
             validateVariantCanBeOrdered(variant);
 
-            int currentStock = variant.getStockQuantity() == null ? 0 : variant.getStockQuantity();
-            if (currentStock < totalRequestedQuantity) {
+            int availableStock = stockReservationService.getAvailableStock(variant);
+            if (availableStock < totalRequestedQuantity) {
                 throw new InvalidRequestException(
-                        "Không đủ tồn kho cho sản phẩm: "
+                        "Sản phẩm không đủ tồn kho khả dụng hoặc đang được giữ bởi đơn hàng khác: "
                                 + variant.getProduct().getName()
                                 + " - "
                                 + variant.getCode()
@@ -348,7 +348,10 @@ public class OrderServiceImpl implements OrderService {
         boolean isAdmin = currentUser.getRole() != null
                 && "ADMIN".equals(currentUser.getRole().getCode());
 
-        if (!isOwner && !isAdmin) {
+        boolean isStaff = currentUser.getRole() != null
+                && "STAFF".equals(currentUser.getRole().getCode());
+
+        if (!isOwner && !isAdmin && !isStaff) {
             throw new AccessDeniedException("Bạn không có quyền xem chi tiết đơn hàng này.");
         }
 
@@ -606,6 +609,19 @@ public class OrderServiceImpl implements OrderService {
 
         if (!ORDER_STATUS_PENDING.equals(order.getStatus())) {
             throw new InvalidRequestException("Chỉ có thể hủy đơn hàng ở trạng thái 'Chờ xác nhận'.");
+        }
+
+        List<Payment> payments = paymentRepository.findByOrder_Id(orderId);
+        boolean isVnpayOrder = payments.stream()
+                .anyMatch(p -> p.getPaymentMethod() != null
+                        && "VNPAY".equalsIgnoreCase(p.getPaymentMethod().getCode()));
+        boolean hasPaidPayment = payments.stream()
+                .anyMatch(p -> "PAID".equalsIgnoreCase(p.getStatus()));
+        BigDecimal paid = order.getCustomerPaid() == null ? BigDecimal.ZERO : order.getCustomerPaid();
+        if (isVnpayOrder && (hasPaidPayment || paid.compareTo(BigDecimal.ZERO) > 0)) {
+            throw new InvalidRequestException(
+                    "Đơn hàng đã thanh toán VNPay, không thể hủy trực tiếp. Vui lòng liên hệ cửa hàng để được hỗ trợ."
+            );
         }
 
         String previousStatus = order.getStatus();

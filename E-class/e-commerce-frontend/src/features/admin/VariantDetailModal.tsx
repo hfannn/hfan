@@ -80,6 +80,7 @@ interface VariantDetailModalProps {
   onDelete: (id: number) => void;
   onAddVariant: (data: { productId: number; variants: any[] }) => Promise<void>;
   refreshKey?: number;
+  readOnly?: boolean;
 }
 
 interface AttributeOption {
@@ -98,6 +99,7 @@ const VariantDetailModal: React.FC<VariantDetailModalProps> = ({
   onDelete,
   onAddVariant,
   refreshKey = 0,
+  readOnly = false,
 }) => {
   const [product, setProduct] = useState<ProductDetail | null>(null);
   const [loading, setLoading] = useState(false);
@@ -620,27 +622,31 @@ const VariantDetailModal: React.FC<VariantDetailModalProps> = ({
         </Tag>
       ),
     },
-    {
-      title: "Thao tác",
-      key: "action",
-      width: 160,
-      fixed: "right" as const,
-      render: (_: any, record: Variant) => (
-        <Space>
-          <Button icon={<EditOutlined />} onClick={() => setEditingVariant(record)}>
-            Sửa
-          </Button>
+    ...(!readOnly
+      ? [
+          {
+            title: "Thao tác",
+            key: "action",
+            width: 160,
+            fixed: "right" as const,
+            render: (_: any, record: Variant) => (
+              <Space>
+                <Button icon={<EditOutlined />} onClick={() => setEditingVariant(record)}>
+                  Sửa
+                </Button>
 
-          <Button
-            danger
-            icon={<DeleteOutlined />}
-            onClick={() => onDelete(record.id)}
-          >
-            Xóa
-          </Button>
-        </Space>
-      ),
-    },
+                <Button
+                  danger
+                  icon={<DeleteOutlined />}
+                  onClick={() => onDelete(record.id)}
+                >
+                  Xóa
+                </Button>
+              </Space>
+            ),
+          },
+        ]
+      : []),
   ];
 
   return (
@@ -775,6 +781,7 @@ const VariantDetailModal: React.FC<VariantDetailModalProps> = ({
               }}
             />
 
+            {!readOnly && (<>
             <Divider>Thêm biến thể mới</Divider>
 
             <Space direction="vertical" style={{ width: "100%", marginBottom: 16 }}>
@@ -1017,6 +1024,7 @@ const VariantDetailModal: React.FC<VariantDetailModalProps> = ({
                 </Space>
               </Form.Item>
             </Form>
+            </>)}
           </Space>
         )}
       </Spin>

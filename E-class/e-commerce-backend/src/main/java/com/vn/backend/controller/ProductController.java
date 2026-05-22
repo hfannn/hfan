@@ -12,6 +12,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -129,12 +130,14 @@ public class ProductController {
         return ResponseEntity.ok(productService.getProductDetail(id, includeInactive));
     }
 
+    @PreAuthorize("hasRole('ADMIN')")
     @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<Product> create(@RequestBody @Valid ProductCreateRequest request) {
         Product product = productService.create(request);
         return ResponseEntity.ok(product);
     }
 
+    @PreAuthorize("hasRole('ADMIN')")
     @PutMapping(value = "/{id}", consumes = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<ProductDetailResponse> update(
             @PathVariable Long id,
@@ -143,6 +146,7 @@ public class ProductController {
         return ResponseEntity.ok(productService.update(id, request));
     }
 
+    @PreAuthorize("hasRole('ADMIN')")
     @PostMapping(value = "/with-images", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<ProductCreatedResponse> createWithImages(
             @RequestPart("data") @Valid ProductCreateRequest request,
@@ -155,12 +159,14 @@ public class ProductController {
         ));
     }
 
+    @PreAuthorize("hasRole('ADMIN')")
     @PostMapping(value = "/upload-image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<String> uploadImage(@RequestPart("file") MultipartFile file) {
         String fileUrl = productService.uploadSingleImage(file);
         return ResponseEntity.ok(fileUrl);
     }
 
+    @PreAuthorize("hasRole('ADMIN')")
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteProduct(@PathVariable Long id) {
         productService.deleteProduct(id);

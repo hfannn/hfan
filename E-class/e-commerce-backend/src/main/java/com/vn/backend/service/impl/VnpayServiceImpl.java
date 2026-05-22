@@ -181,12 +181,15 @@ public class VnpayServiceImpl implements com.vn.backend.service.VnpayService {
                     .build();
         }
 
-        Payment payment = paymentRepository.findByProviderTxnRef(txnRef).orElse(null);
+        // Lock payment row để tránh race giữa RETURN và IPN
+        Payment payment = paymentRepository.findByProviderTxnRefForUpdate(txnRef).orElse(null);
         Long orderId = payment != null && payment.getOrder() != null
                 ? payment.getOrder().getId()
                 : null;
 
-        boolean success = isPaymentSuccess(responseCode, transactionStatus);
+        boolean vnpaySuccess = isPaymentSuccess(responseCode, transactionStatus);
+        boolean actualSuccess = vnpaySuccess;
+        String resultMessage;
 
         /*
          * DEV fallback:
@@ -195,12 +198,15 @@ public class VnpayServiceImpl implements com.vn.backend.service.VnpayService {
          * Production vẫn nên ưu tiên IPN là nguồn cập nhật chính.
          */
         if (payment != null) {
-            if (success) {
-                finalizeSuccessfulPayment(
+            if (vnpaySuccess) {
+                actualSuccess = finalizeSuccessfulPayment(
                         payment,
                         transactionNo,
                         "Thanh toán VNPAY thành công (RETURN)"
                 );
+                resultMessage = actualSuccess
+                        ? "Thanh toán thành công"
+                        : MSG_ORDER_CANCELLED_OR_EXPIRED;
             } else {
                 markPaymentFailed(
                         payment,
@@ -209,14 +215,17 @@ public class VnpayServiceImpl implements com.vn.backend.service.VnpayService {
                         transactionStatus,
                         "RETURN"
                 );
+                resultMessage = buildFailureMessage(responseCode, transactionStatus);
             }
+        } else {
+            resultMessage = vnpaySuccess
+                    ? "Thanh toán thành công nhưng không tìm thấy bản ghi payment"
+                    : buildFailureMessage(responseCode, transactionStatus);
         }
 
         return PosVnpayReturnResponse.builder()
-                .success(success)
-                .message(success
-                        ? "Thanh toán thành công"
-                        : buildFailureMessage(responseCode, transactionStatus))
+                .success(actualSuccess)
+                .message(resultMessage)
                 .txnRef(txnRef)
                 .transactionNo(transactionNo)
                 .responseCode(responseCode)
@@ -236,13 +245,16 @@ public class VnpayServiceImpl implements com.vn.backend.service.VnpayService {
             return "{\"RspCode\":\"97\",\"Message\":\"Chữ ký không hợp lệ\"}";
         }
 
-        Payment payment = paymentRepository.findByProviderTxnRef(txnRef).orElse(null);
+        // Lock payment row để tránh race giữa IPN và RETURN
+        Payment payment = paymentRepository.findByProviderTxnRefForUpdate(txnRef).orElse(null);
 
         if (payment == null) {
             return "{\"RspCode\":\"01\",\"Message\":\"Không tìm thấy đơn hàng\"}";
         }
 
         if (isPaymentSuccess(responseCode, transactionStatus)) {
+            // finalizeSuccessfulPayment trả false khi đơn POS bị hủy.
+            // Vẫn trả RspCode "00" để VNPay không retry IPN.
             finalizeSuccessfulPayment(
                     payment,
                     transactionNo,
@@ -458,20 +470,26 @@ public class VnpayServiceImpl implements com.vn.backend.service.VnpayService {
                     .build();
         }
 
-        Payment payment = paymentRepository.findByProviderTxnRef(txnRef).orElse(null);
+        // Lock payment row để tránh race giữa RETURN và IPN
+        Payment payment = paymentRepository.findByProviderTxnRefForUpdate(txnRef).orElse(null);
         Long orderId = payment != null && payment.getOrder() != null
                 ? payment.getOrder().getId()
                 : null;
 
-        boolean success = isPaymentSuccess(responseCode, transactionStatus);
+        boolean vnpaySuccess = isPaymentSuccess(responseCode, transactionStatus);
+        boolean actualSuccess = vnpaySuccess;
+        String resultMessage;
 
         if (payment != null) {
-            if (success) {
-                finalizeSuccessfulOnlinePayment(
+            if (vnpaySuccess) {
+                actualSuccess = finalizeSuccessfulOnlinePayment(
                         payment,
                         transactionNo,
                         "Thanh toán VNPAY online thành công (RETURN)"
                 );
+                resultMessage = actualSuccess
+                        ? "Thanh toán thành công"
+                        : MSG_ORDER_CANCELLED_OR_EXPIRED;
             } else {
                 markOnlinePaymentFailed(
                         payment,
@@ -480,14 +498,17 @@ public class VnpayServiceImpl implements com.vn.backend.service.VnpayService {
                         transactionStatus,
                         "RETURN"
                 );
+                resultMessage = buildFailureMessage(responseCode, transactionStatus);
             }
+        } else {
+            resultMessage = vnpaySuccess
+                    ? "Thanh toán thành công nhưng không tìm thấy bản ghi payment"
+                    : buildFailureMessage(responseCode, transactionStatus);
         }
 
         return PosVnpayReturnResponse.builder()
-                .success(success)
-                .message(success
-                        ? "Thanh toán thành công"
-                        : buildFailureMessage(responseCode, transactionStatus))
+                .success(actualSuccess)
+                .message(resultMessage)
                 .txnRef(txnRef)
                 .transactionNo(transactionNo)
                 .responseCode(responseCode)
@@ -507,13 +528,16 @@ public class VnpayServiceImpl implements com.vn.backend.service.VnpayService {
             return "{\"RspCode\":\"97\",\"Message\":\"Chữ ký không hợp lệ\"}";
         }
 
-        Payment payment = paymentRepository.findByProviderTxnRef(txnRef).orElse(null);
+        // Lock payment row để tránh race giữa IPN và RETURN
+        Payment payment = paymentRepository.findByProviderTxnRefForUpdate(txnRef).orElse(null);
 
         if (payment == null) {
             return "{\"RspCode\":\"01\",\"Message\":\"Không tìm thấy đơn hàng\"}";
         }
 
         if (isPaymentSuccess(responseCode, transactionStatus)) {
+            // finalizeSuccessfulOnlinePayment trả false khi đơn bị hủy / reservation hết hạn.
+            // Vẫn trả RspCode "00" để VNPay không retry IPN.
             finalizeSuccessfulOnlinePayment(
                     payment,
                     transactionNo,
@@ -587,41 +611,75 @@ public class VnpayServiceImpl implements com.vn.backend.service.VnpayService {
         }
     }
 
-    private void finalizeSuccessfulOnlinePayment(
+    private static final String MSG_ORDER_CANCELLED_OR_EXPIRED =
+            "Đơn hàng đã bị hủy hoặc phiên giữ hàng đã hết hạn. Thanh toán không được ghi nhận.";
+
+    /**
+     * Xác nhận thanh toán VNPay online thành công.
+     * Phải kiểm tra order còn hợp lệ và reservation còn RESERVED trước khi set PAID.
+     * Return true nếu ghi nhận thành công, false nếu đơn đã hủy / reservation hết hạn.
+     */
+    private boolean finalizeSuccessfulOnlinePayment(
             Payment payment,
             String transactionNo,
             String successNote
     ) {
+        // Idempotent: payment đã PAID từ lần trước
         if (PAYMENT_STATUS_PAID.equalsIgnoreCase(payment.getStatus())) {
-            return;
+            Order o = payment.getOrder();
+            // Nếu đơn còn hợp lệ → coi như đã xử lý thành công
+            if (o != null && !ORDER_STATUS_CANCELLED.equalsIgnoreCase(o.getStatus())) {
+                return true;
+            }
+            // PAID + CANCELLED = trạng thái bất thường, không báo success
+            return false;
         }
 
+        Order order = payment.getOrder();
+        if (order == null) {
+            return false;
+        }
+
+        // Lock order để tránh race với admin cancel / scheduler expire
+        Order locked = orderRepository.findByIdForUpdate(order.getId()).orElse(null);
+        if (locked == null) {
+            return false;
+        }
+
+        // Validate: đơn chưa bị hủy / fail / hết hạn
+        String st = locked.getStatus();
+        if (ORDER_STATUS_CANCELLED.equalsIgnoreCase(st)
+                || "FAILED".equalsIgnoreCase(st)
+                || "REFUNDED".equalsIgnoreCase(st)
+                || "EXPIRED".equalsIgnoreCase(st)) {
+            return false;
+        }
+
+        // ONLINE: xác nhận reservation + trừ stock thật — phải thành công mới set PAID
+        if (ORDER_TYPE_ONLINE.equalsIgnoreCase(locked.getOrderType())
+                && !Boolean.TRUE.equals(locked.getInventoryReserved())) {
+            boolean deducted = stockReservationService.confirmAndDeductStock(locked.getId());
+            if (!deducted) {
+                // Reservation đã bị release/expire → từ chối ghi nhận payment
+                return false;
+            }
+            locked.setInventoryReserved(true);
+            locked.setInventoryReservedAt(OffsetDateTime.now());
+        }
+
+        // Tất cả check qua → ghi nhận PAID
         payment.setStatus(PAYMENT_STATUS_PAID);
         payment.setTransactionCode(transactionNo);
         payment.setPaidAt(OffsetDateTime.now());
         payment.setNote(successNote);
         paymentRepository.save(payment);
 
-        Order order = payment.getOrder();
-        if (order != null) {
-            if (ORDER_TYPE_ONLINE.equalsIgnoreCase(order.getOrderType())
-                    && !Boolean.TRUE.equals(order.getInventoryReserved())) {
-                // Xac nhan reservation va tru stockQuantity that
-                // Idempotent: neu khong co RESERVED hoac da CONFIRMED thi return false
-                boolean deducted = stockReservationService.confirmAndDeductStock(order.getId());
-                if (deducted) {
-                    order.setInventoryReserved(true);
-                    order.setInventoryReservedAt(OffsetDateTime.now());
-                }
-            }
+        locked.setCustomerPaid(defaultZero(payment.getAmount()));
+        // Giữ nguyên PENDING để admin xác nhận thủ công
+        orderRepository.save(locked);
 
-            order.setCustomerPaid(defaultZero(payment.getAmount()));
-
-            // Giữ nguyên PENDING để admin xác nhận thủ công
-            orderRepository.save(order);
-
-            saveVoucherUsageIfNeeded(order);
-        }
+        saveVoucherUsageIfNeeded(locked);
+        return true;
     }
 
     private void markOnlinePaymentFailed(
@@ -773,35 +831,52 @@ public class VnpayServiceImpl implements com.vn.backend.service.VnpayService {
                 || "00".equals(transactionStatus));
     }
 
-    private void finalizeSuccessfulPayment(
+    /**
+     * Xác nhận thanh toán VNPay POS thành công.
+     * Kiểm tra đơn chưa bị hủy trước khi set PAID.
+     * Return true nếu ghi nhận thành công, false nếu đơn đã hủy.
+     */
+    private boolean finalizeSuccessfulPayment(
             Payment payment,
             String transactionNo,
             String successNote
     ) {
         if (PAYMENT_STATUS_PAID.equals(payment.getStatus())) {
-            return;
+            return true;
         }
-
-        payment.setStatus(PAYMENT_STATUS_PAID);
-        payment.setTransactionCode(transactionNo);
-        payment.setPaidAt(OffsetDateTime.now());
-        payment.setNote(successNote);
-        paymentRepository.save(payment);
 
         Order order = payment.getOrder();
         if (order != null) {
-            if (!ORDER_STATUS_COMPLETED.equals(order.getStatus())) {
-                String previousStatus = order.getStatus();
-
-                order.setCustomerPaid(defaultZero(payment.getAmount()));
-                order.setStatus(ORDER_STATUS_COMPLETED);
-                orderRepository.save(order);
-
-                saveOrderStatusHistory(order, previousStatus, ORDER_STATUS_COMPLETED);
+            // Lock order để tránh race với POS cancelOrder
+            Order locked = orderRepository.findByIdForUpdate(order.getId()).orElse(null);
+            if (locked == null || ORDER_STATUS_CANCELLED.equalsIgnoreCase(locked.getStatus())) {
+                return false;
             }
 
-            saveVoucherUsageIfNeeded(order);
+            payment.setStatus(PAYMENT_STATUS_PAID);
+            payment.setTransactionCode(transactionNo);
+            payment.setPaidAt(OffsetDateTime.now());
+            payment.setNote(successNote);
+            paymentRepository.save(payment);
+
+            if (!ORDER_STATUS_COMPLETED.equals(locked.getStatus())) {
+                String previousStatus = locked.getStatus();
+                locked.setCustomerPaid(defaultZero(payment.getAmount()));
+                locked.setStatus(ORDER_STATUS_COMPLETED);
+                orderRepository.save(locked);
+                saveOrderStatusHistory(locked, previousStatus, ORDER_STATUS_COMPLETED);
+            }
+
+            saveVoucherUsageIfNeeded(locked);
+        } else {
+            payment.setStatus(PAYMENT_STATUS_PAID);
+            payment.setTransactionCode(transactionNo);
+            payment.setPaidAt(OffsetDateTime.now());
+            payment.setNote(successNote);
+            paymentRepository.save(payment);
         }
+
+        return true;
     }
 
     private void markPaymentFailed(

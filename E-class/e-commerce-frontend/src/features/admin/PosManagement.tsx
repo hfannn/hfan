@@ -277,7 +277,7 @@ const PosManagement = () => {
   );
 
   const [checkoutData, setCheckoutData] = useState({
-    paymentMethodId: 1,
+    paymentMethodId: 0,
     customerPaid: 0,
     note: "",
   });
@@ -672,6 +672,12 @@ const PosManagement = () => {
     try {
       const data = await paymentMethodService.getAll();
       setPaymentMethods(data);
+      const cashMethod = data.find(
+        (m) => m.code === "CASH" && m.isActive && POS_PAYMENT_CODES.includes(m.code),
+      );
+      if (cashMethod) {
+        setCheckoutData((prev) => ({ ...prev, paymentMethodId: cashMethod.id }));
+      }
     } catch (error: any) {
       message.error(
         error?.response?.data?.message ||
@@ -710,7 +716,11 @@ const PosManagement = () => {
       setValidationResult(result);
       setPendingCheckoutPayload(payload);
 
-      if (!result.valid || result.hasChanges || result.issues.length > 0) {
+      const estimatedDiscount = selectedDiscount?.estimatedDiscountAmount ?? 0;
+      const couponDiscountChanged =
+        couponId !== null && result.couponDiscount !== estimatedDiscount;
+
+      if (!result.valid || result.hasChanges || result.issues.length > 0 || couponDiscountChanged) {
         setValidationModalOpen(true);
         return;
       }
@@ -1624,8 +1634,9 @@ const PosManagement = () => {
               <Text strong>Phương thức thanh toán</Text>
               <Select
                 style={{ width: "100%", marginTop: 6 }}
+                placeholder="Chọn phương thức thanh toán"
                 options={paymentOptions}
-                value={checkoutData.paymentMethodId}
+                value={checkoutData.paymentMethodId || undefined}
                 onChange={(value) =>
                   setCheckoutData((prev) => ({
                     ...prev,

@@ -21,6 +21,8 @@ import CategoryManagementPage from "@/features/admin/CategoryManagement";
 import ColorManagementPage from "@/features/admin/ColorManagement";
 import SizeManagementPage from "@/features/admin/SizeManagement";
 import MaterialManagementPage from "@/features/admin/MaterialManagement";
+import OriginManagementPage from "@/features/admin/OriginManagement";
+import SupplierManagementPage from "@/features/admin/SupplierManagement";
 import PromotionManagementPage from "@/features/admin/PromotionManagement";
 import CouponManagementPage from "@/features/admin/CouponManagement";
 import PosManagementPage from "@/features/admin/PosManagement";
@@ -73,6 +75,8 @@ export const router = createBrowserRouter([
         ],
       },
 
+      { path: "origins", element: <OriginManagementPage /> },
+      { path: "suppliers", element: <SupplierManagementPage /> },
       { path: "employees", element: <EmployeeManagementPage /> },
       { path: "customers", element: <CustomerManagementPage /> },
       { path: "inventory", element: <InventoryManagementPage /> },

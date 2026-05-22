@@ -34,13 +34,13 @@ const Login = ({ mode = "user" }: LoginProps) => {
           role: data.role,
         };
 
-        if (isAdminLogin && role !== "ADMIN") {
+        if (isAdminLogin && role !== "ADMIN" && role !== "STAFF") {
           message.error("Tài khoản này không có quyền truy cập trang quản trị.");
           return;
         }
 
-        if (!isAdminLogin && role === "ADMIN") {
-          message.error("Tài khoản admin không được đăng nhập ở màn khách hàng.");
+        if (!isAdminLogin && (role === "ADMIN" || role === "STAFF")) {
+          message.error("Tài khoản nhân viên không được đăng nhập ở màn khách hàng.");
           return;
         }
 
@@ -49,6 +49,8 @@ const Login = ({ mode = "user" }: LoginProps) => {
 
         if (role === "ADMIN") {
           navigate("/admin");
+        } else if (role === "STAFF") {
+          navigate("/admin/pos");
         } else {
           navigate(from, { replace: true });
         }

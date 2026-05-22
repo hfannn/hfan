@@ -28,6 +28,7 @@ import {
 } from "@ant-design/icons";
 import type { ProColumns } from "@ant-design/pro-table";
 import { adminOrderService } from "@/services/admin.order.service";
+import { useAuth } from "@/services/AuthContext";
 import { useLocation, useNavigate } from "react-router-dom";
 import OrderDetailModal from "@/layouts/components/OrderDetailModal";
 import { printThermalInvoice } from "@/utils/invoicePrint";
@@ -71,6 +72,9 @@ interface Order {
 type OrderTypeLabel = "Online" | "Tại quầy";
 
 const OrderManagementPage = () => {
+  const { user } = useAuth();
+  const isStaff = String(user?.role || "").toUpperCase() === "STAFF";
+
   const [allOrders, setAllOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedOrderId, setSelectedOrderId] = useState<number | null>(null);
@@ -395,7 +399,7 @@ const OrderManagementPage = () => {
           </Tooltip>
         ),
 
-        record.status === "PENDING" && (
+        !isStaff && record.status === "PENDING" && (
           <Popconfirm
             key="confirm"
             title="Xác nhận đơn hàng này?"
@@ -415,7 +419,7 @@ const OrderManagementPage = () => {
           </Popconfirm>
         ),
 
-        record.status === "CONFIRMED" && (
+        !isStaff && record.status === "CONFIRMED" && (
           <Popconfirm
             key="ship"
             title="Xác nhận giao hàng?"
@@ -435,7 +439,7 @@ const OrderManagementPage = () => {
           </Popconfirm>
         ),
 
-        record.status === "SHIPPING" && (
+        !isStaff && record.status === "SHIPPING" && (
           <Popconfirm
             key="complete"
             title="Hoàn thành đơn hàng?"
