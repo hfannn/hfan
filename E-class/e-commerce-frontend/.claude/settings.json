@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//d/shoe-management/E-class/e-commerce-backend/src/main/java/com/vn/backend/dto/request/pos/**)",
+      "Read(//d/shoe-management/E-class/e-commerce-backend/src/main/java/com/vn/backend/entity/**)",
+      "Bash(curl -s http://localhost:8080/api/v1/auth/login -X POST -H \"Content-Type: application/json\" -d '{\"username\":\"customer_test1\",\"password\":\"123456\"}')",
+      "Bash(curl -s http://localhost:8080/api/v1/auth/login -X POST -H \"Content-Type: application/json\" -d '{\"username\":\"admin_super\",\"password\":\"123456\"}')",
+      "Bash(PGPASSWORD=123456 psql -h localhost -U postgres -d shoe_fix -t -c \"SELECT u.username FROM users u JOIN roles r ON u.role_id=r.id WHERE r.code='STAFF' AND u.is_active=true LIMIT 3;\")"
+    ],
+    "additionalDirectories": [
+      "d:\\shoe-management\\E-class\\e-commerce-backend\\src\\main\\java\\com\\vn\\backend\\entity",
+      "d:\\shoe-management\\E-class\\e-commerce-backend\\src\\main\\java\\com\\vn\\backend\\repository"
+    ]
+  }
+}

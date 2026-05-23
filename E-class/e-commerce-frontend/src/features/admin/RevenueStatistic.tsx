@@ -483,7 +483,7 @@ const RevenueStatisticPage = () => {
         <Col xs={24} sm={12} lg={8} xl={4}>
           <Card style={{ borderRadius: 12 }}>
             <Statistic
-              title="Tổng doanh thu"
+              title="Doanh thu hoàn tất"
               value={Number(overview.totalRevenue || 0)}
               formatter={(value) => formatCurrency(Number(value || 0))}
             />

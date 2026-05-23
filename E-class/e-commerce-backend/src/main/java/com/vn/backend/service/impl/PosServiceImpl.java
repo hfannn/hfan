@@ -43,6 +43,7 @@ import com.vn.backend.repository.ProductImageRepository;
 import com.vn.backend.repository.ProductVariantRepository;
 import com.vn.backend.repository.StoreRepository;
 import com.vn.backend.repository.UserProfileRepository;
+import com.vn.backend.repository.UserRepository;
 import com.vn.backend.service.PosService;
 import com.vn.backend.service.ProductPriceService;
 import jakarta.persistence.EntityManager;
@@ -93,12 +94,13 @@ public class PosServiceImpl implements PosService {
     private final CouponRepository couponRepository;
     private final CouponUsageRepository couponUsageRepository;
     private final UserProfileRepository userProfileRepository;
+    private final UserRepository userRepository;
     private final ProductPriceService productPriceService;
     private final EntityManager entityManager;
     private final StockReservationService stockReservationService;
 
     @Override
-    public PosOrderResponse createOrder(PosCreateOrderRequest request) {
+    public PosOrderResponse createOrder(PosCreateOrderRequest request, Long userId) {
         long currentDraftCount = orderRepository.countByStatusAndOrderType(
                 ORDER_STATUS_DRAFT,
                 ORDER_TYPE_POS
@@ -111,8 +113,14 @@ public class PosServiceImpl implements PosService {
             );
         }
 
-        Employee employee = employeeRepository.findById(request.getEmployeeId().longValue())
-                .orElseThrow(() -> new EntityNotFoundException("Không tìm thấy nhân viên"));
+        com.vn.backend.entity.User currentUser = userRepository.findById(userId)
+                .orElseThrow(() -> new EntityNotFoundException("Không tìm thấy người dùng"));
+        UserProfile currentProfile = currentUser.getUserProfile();
+        if (currentProfile == null) {
+            throw new IllegalArgumentException("Tài khoản chưa được liên kết hồ sơ nhân viên.");
+        }
+        Employee employee = employeeRepository.findByUserProfile(currentProfile)
+                .orElseThrow(() -> new IllegalArgumentException("Tài khoản chưa được liên kết hồ sơ nhân viên."));
 
         Store store = storeRepository.findById(request.getStoreId().longValue())
                 .orElseThrow(() -> new EntityNotFoundException("Không tìm thấy cửa hàng"));
@@ -208,7 +216,7 @@ public class PosServiceImpl implements PosService {
         ProductVariant variant = getLockedVariantOrThrow(request.getProductVariantId());
 
         if (!isSellableVariant(variant)) {
-            throw new IllegalArgumentException("San pham khong kha dung de ban");
+            throw new IllegalArgumentException("Sản phẩm không khả dụng để bán.");
         }
 
         Integer currentStock   = variant.getStockQuantity() == null ? 0 : variant.getStockQuantity();
@@ -216,8 +224,8 @@ public class PosServiceImpl implements PosService {
         int availableStock     = currentStock - activeReserved;
         if (availableStock < addQty) {
             String msg = activeReserved > 0 && currentStock >= addQty
-                    ? "San pham dang duoc giu boi don thanh toan online, ton kha dung khong du"
-                    : "San pham dang het hang hoac khong du ton kho";
+                    ? "Sản phẩm đang được giữ bởi đơn thanh toán online, tồn kho khả dụng không đủ."
+                    : "Sản phẩm đang hết hàng hoặc không đủ tồn kho.";
             throw new IllegalArgumentException(msg);
         }
 
@@ -293,8 +301,8 @@ public class PosServiceImpl implements PosService {
             int availableStock    = currentStock - activeReserved;
             if (availableStock < delta) {
                 String msg = activeReserved > 0 && currentStock >= delta
-                        ? "San pham dang duoc giu boi don thanh toan online, ton kha dung khong du"
-                        : "San pham dang het hang hoac khong du ton kho";
+                        ? "Sản phẩm đang được giữ bởi đơn thanh toán online, tồn kho khả dụng không đủ."
+                        : "Sản phẩm đang hết hàng hoặc không đủ tồn kho.";
                 throw new IllegalArgumentException(msg);
             }
 
@@ -1224,7 +1232,7 @@ public class PosServiceImpl implements PosService {
         }
 
         if (currentStock < quantity) {
-            throw new IllegalArgumentException("Sản phẩm đang hết hàng hoặc không đủ tồn kho");
+            throw new IllegalArgumentException("Sản phẩm đang hết hàng hoặc không đủ tồn kho.");
         }
 
         variant.setStockQuantity(currentStock - quantity);

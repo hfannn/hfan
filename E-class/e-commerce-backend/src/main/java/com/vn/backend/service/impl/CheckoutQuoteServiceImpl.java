@@ -21,6 +21,7 @@ import com.vn.backend.service.CheckoutQuoteService;
 import com.vn.backend.service.DiscountService;
 import com.vn.backend.service.GhnShippingService;
 import com.vn.backend.service.ProductPriceService;
+import com.vn.backend.service.impl.StockReservationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -42,6 +43,7 @@ public class CheckoutQuoteServiceImpl implements CheckoutQuoteService {
     private final ProductPriceService productPriceService;
     private final DiscountService discountService;
     private final GhnShippingService ghnShippingService;
+    private final StockReservationService stockReservationService;
 
     @Override
     public CheckoutQuoteResponse quote(CheckoutQuoteRequest request, CustomUserDetails userDetails) {
@@ -339,9 +341,9 @@ public class CheckoutQuoteServiceImpl implements CheckoutQuoteService {
                 continue;
             }
 
-            // Check stock
-            int currentStock = variant.getStockQuantity() == null ? 0 : variant.getStockQuantity();
-            if (currentStock < item.getQuantity()) {
+            // Check available stock (physical stock minus active VNPay reservations)
+            int availableStock = stockReservationService.getAvailableStock(variant);
+            if (availableStock < item.getQuantity()) {
                 issues.add(CheckoutValidationResponse.ValidationIssue.builder()
                         .type("OUT_OF_STOCK")
                         .severity("BLOCKING")
@@ -349,9 +351,8 @@ public class CheckoutQuoteServiceImpl implements CheckoutQuoteService {
                         .variantId(variantId)
                         .productName(productName)
                         .oldValue(BigDecimal.valueOf(item.getQuantity()))
-                        .newValue(BigDecimal.valueOf(Math.max(currentStock, 0)))
-                        .message("Sản phẩm \"" + productName + "\" không đủ tồn kho (yêu cầu: "
-                                + item.getQuantity() + ", còn: " + Math.max(currentStock, 0) + ")")
+                        .newValue(BigDecimal.valueOf(Math.max(availableStock, 0)))
+                        .message("Sản phẩm không đủ tồn kho khả dụng hoặc đang được giữ bởi đơn hàng khác.")
                         .build());
                 hasBlocking = true;
             }

@@ -1,6 +1,7 @@
 package com.vn.backend.controller;
 
 import com.vn.backend.entity.Origin;
+import com.vn.backend.exception.ConflictException;
 import com.vn.backend.exception.ResourceNotFoundException;
 import com.vn.backend.repository.OriginRepository;
 import jakarta.validation.Valid;
@@ -28,8 +29,12 @@ public class OriginController {
 
     @PostMapping
     public Origin create(@RequestBody @Valid OriginRequest req) {
+        String name = req.name().trim();
+        if (originRepository.existsByNameIgnoreCaseAndDeletedAtIsNull(name)) {
+            throw new ConflictException("Xuất xứ đã tồn tại.");
+        }
         Origin origin = new Origin();
-        origin.setName(req.name().trim());
+        origin.setName(name);
         origin.setIsActive(true);
         return originRepository.save(origin);
     }
@@ -38,7 +43,11 @@ public class OriginController {
     public Origin update(@PathVariable Long id, @RequestBody @Valid OriginRequest req) {
         Origin origin = originRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy xuất xứ"));
-        origin.setName(req.name().trim());
+        String name = req.name().trim();
+        if (originRepository.existsByNameIgnoreCaseAndDeletedAtIsNullAndIdNot(name, id)) {
+            throw new ConflictException("Xuất xứ đã tồn tại.");
+        }
+        origin.setName(name);
         return originRepository.save(origin);
     }
 

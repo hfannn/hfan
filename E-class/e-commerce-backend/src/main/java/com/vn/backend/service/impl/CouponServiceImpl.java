@@ -53,7 +53,7 @@ public class CouponServiceImpl implements CouponService {
         BigDecimal maxDiscountAmount = resolveMaxDiscountAmount(normalizedDiscountType, request.getMaxDiscountAmount());
 
         if (couponRepository.existsByCode(normalizedCode)) {
-            throw new IllegalArgumentException("Mã coupon đã tồn tại");
+            throw new IllegalArgumentException("Mã giảm giá đã tồn tại.");
         }
 
         Coupon coupon = Coupon.builder()
@@ -81,7 +81,7 @@ public class CouponServiceImpl implements CouponService {
         BigDecimal maxDiscountAmount = resolveMaxDiscountAmount(normalizedDiscountType, request.getMaxDiscountAmount());
 
         if (couponRepository.existsByCodeAndIdNot(normalizedCode, id)) {
-            throw new IllegalArgumentException("Mã coupon đã tồn tại");
+            throw new IllegalArgumentException("Mã giảm giá đã tồn tại.");
         }
 
         Coupon coupon = couponRepository.findById(id)
@@ -91,7 +91,7 @@ public class CouponServiceImpl implements CouponService {
             long usedCount = couponUsageRepository.countValidUsagesByCouponId(id);
             if (request.getUsageLimit() < usedCount) {
                 throw new IllegalArgumentException(
-                        "Tong luot su dung khong duoc nho hon so luot da dung (" + usedCount + ")");
+                        "Tổng lượt sử dụng không được nhỏ hơn số lượt đã dùng (" + usedCount + ").");
             }
         }
 
@@ -184,7 +184,7 @@ public class CouponServiceImpl implements CouponService {
         String normalizedDiscountType = normalizeDiscountType(request.getDiscountType());
 
         if (normalizedCode == null || normalizedCode.isBlank()) {
-            throw new IllegalArgumentException("Mã coupon không được để trống");
+            throw new IllegalArgumentException("Mã giảm giá không được để trống.");
         }
 
         if (!normalizedCode.matches("^[A-Z0-9_-]+$")) {

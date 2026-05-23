@@ -43,11 +43,11 @@ import VoucherSelectorModal, {
   getBestVoucher,
   VoucherOption,
 } from "@/components/VoucherSelectorModal";
+import { handleImageError, resolveImageUrl } from "@/utils/utils";
 import { formatKnownVariantAttributes } from "@/utils/productAttributeLabel";
 
 const { Title, Text } = Typography;
 
-const DEFAULT_EMPLOYEE_ID = 2;
 const DEFAULT_STORE_ID = 1;
 
 const MAX_DRAFT_POS_ORDERS = 5;
@@ -415,7 +415,6 @@ const PosManagement = () => {
       setCreating(true);
 
       const data = await posService.createOrder({
-        employeeId: DEFAULT_EMPLOYEE_ID,
         customerId: null,
         storeId: DEFAULT_STORE_ID,
         note: "Khách mua tại quầy",
@@ -796,8 +795,9 @@ const PosManagement = () => {
       render: (_: any, record: PosOrderItemResponse) => (
         <Space align="start">
           <img
-            src={record.imageUrl || "https://via.placeholder.com/56"}
+            src={resolveImageUrl(record.imageUrl)}
             alt={record.productName}
+            onError={handleImageError}
             style={{
               width: 56,
               height: 56,
@@ -881,8 +881,9 @@ const PosManagement = () => {
       width: 80,
       render: (value: string) => (
         <img
-          src={value || "https://via.placeholder.com/56"}
+          src={resolveImageUrl(value)}
           alt="sp"
+          onError={handleImageError}
           style={{
             width: 56,
             height: 56,

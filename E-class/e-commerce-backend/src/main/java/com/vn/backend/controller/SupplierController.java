@@ -1,6 +1,7 @@
 package com.vn.backend.controller;
 
 import com.vn.backend.entity.Supplier;
+import com.vn.backend.exception.ConflictException;
 import com.vn.backend.exception.ResourceNotFoundException;
 import com.vn.backend.repository.SupplierRepository;
 import jakarta.validation.Valid;
@@ -28,8 +29,12 @@ public class SupplierController {
 
     @PostMapping
     public Supplier create(@RequestBody @Valid SupplierRequest req) {
+        String normalizedCode = req.code().trim().toUpperCase();
+        if (supplierRepository.existsByCode(normalizedCode)) {
+            throw new ConflictException("Mã nhà cung cấp đã tồn tại.");
+        }
         Supplier s = new Supplier();
-        s.setCode(req.code().trim().toUpperCase());
+        s.setCode(normalizedCode);
         s.setName(req.name().trim());
         s.setPhone(req.phone() != null ? req.phone().trim() : null);
         s.setIsActive(true);
@@ -40,7 +45,11 @@ public class SupplierController {
     public Supplier update(@PathVariable Long id, @RequestBody @Valid SupplierRequest req) {
         Supplier s = supplierRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy nhà cung cấp"));
-        s.setCode(req.code().trim().toUpperCase());
+        String normalizedCode = req.code().trim().toUpperCase();
+        if (supplierRepository.existsByCodeAndIdNot(normalizedCode, id)) {
+            throw new ConflictException("Mã nhà cung cấp đã tồn tại.");
+        }
+        s.setCode(normalizedCode);
         s.setName(req.name().trim());
         s.setPhone(req.phone() != null ? req.phone().trim() : null);
         return supplierRepository.save(s);

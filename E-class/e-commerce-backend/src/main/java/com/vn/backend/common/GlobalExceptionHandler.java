@@ -7,6 +7,7 @@ import com.vn.backend.exception.ResourceNotFoundException;
 import jakarta.persistence.EntityNotFoundException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -154,6 +155,15 @@ public class GlobalExceptionHandler {
         return buildResponse(HttpStatus.METHOD_NOT_ALLOWED, ex.getMessage(), request.getRequestURI());
     }
 
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ApiErrorResponse> handleDataIntegrityViolation(
+            DataIntegrityViolationException ex,
+            HttpServletRequest request
+    ) {
+        String message = resolveConstraintMessage(ex);
+        return buildResponse(HttpStatus.CONFLICT, message, request.getRequestURI());
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiErrorResponse> handleGeneralException(
             Exception ex,
@@ -162,9 +172,31 @@ public class GlobalExceptionHandler {
         ex.printStackTrace();
         return buildResponse(
                 HttpStatus.INTERNAL_SERVER_ERROR,
-                ex.getMessage() != null ? ex.getMessage() : "Internal Server Error",
+                "Có lỗi xảy ra. Vui lòng thử lại sau.",
                 request.getRequestURI()
         );
+    }
+
+    private String resolveConstraintMessage(DataIntegrityViolationException ex) {
+        String detail = "";
+        if (ex.getMessage() != null) detail += ex.getMessage().toLowerCase();
+        if (ex.getCause() != null && ex.getCause().getMessage() != null) {
+            detail += " " + ex.getCause().getMessage().toLowerCase();
+        }
+        if (ex.getMostSpecificCause() != null && ex.getMostSpecificCause().getMessage() != null) {
+            detail += " " + ex.getMostSpecificCause().getMessage().toLowerCase();
+        }
+
+        if (detail.contains("users_email_key")) return "Email đã được sử dụng.";
+        if (detail.contains("users_username_key")) return "Tên đăng nhập đã tồn tại.";
+        if (detail.contains("user_profiles_phone_key") || detail.contains("ukghihfr8rpwng616ynpu779f79"))
+            return "Số điện thoại đã được sử dụng.";
+        if (detail.contains("suppliers_code_key")) return "Mã nhà cung cấp đã tồn tại.";
+        if (detail.contains("coupons_code_key")) return "Mã giảm giá đã tồn tại.";
+        if (detail.contains("products_code_key")) return "Mã sản phẩm đã tồn tại.";
+        if (detail.contains("product_variants")) return "Mã biến thể đã tồn tại.";
+
+        return "Dữ liệu đã tồn tại hoặc không hợp lệ. Vui lòng kiểm tra lại.";
     }
 
     private ResponseEntity<ApiErrorResponse> buildResponse(

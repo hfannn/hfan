@@ -27,14 +27,11 @@ import { cartService } from "@/services/cart.service";
 import { useAuth } from "@/services/AuthContext";
 import { ProductDetail, Variant } from "../admin/VariantDetailModal";
 import { PageResponse, ProductList } from "./product.model";
-import { resolveImageUrl } from "@/utils/utils";
+import { FALLBACK_PRODUCT_IMAGE, resolveImageUrl } from "@/utils/utils";
 import ProductListDisplay from "./Products";
 import ProductReviewsSection from "@/features/review/ProductReviewsSection";
 
 const { Title, Text, Paragraph } = Typography;
-
-const NO_IMAGE_PLACEHOLDER =
-  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Cpath fill='%23cccccc' d='M448 80h-80L288 0 160 80H80c-26.5 0-48 21.5-48 48v304c0 26.5 21.5 48 48 48h368c26.5 0 48-21.5 48-48V128c0-26.5-21.5-48-48-48zm-224 48c44.2 0 80 35.8 80 80s-35.8 80-80 80-80-35.8-80-80 35.8-80 80-80zm144 256H96v-16c0-44.2 89.5-64 128-64s89.5 19.8 128 64v16z'/%3E%3C/svg%3E";
 
 const formatMoney = (value?: number | string) =>
   `${Number(value || 0).toLocaleString("vi-VN")} ₫`;
@@ -349,9 +346,9 @@ const ProductDetailPage = () => {
               <Image
                 width="100%"
                 height="100%"
-                src={selectedImage || NO_IMAGE_PLACEHOLDER}
+                src={selectedImage || FALLBACK_PRODUCT_IMAGE}
                 preview={false}
-                fallback={NO_IMAGE_PLACEHOLDER}
+                fallback={FALLBACK_PRODUCT_IMAGE}
                 style={{ objectFit: "contain" }}
               />
             </div>
@@ -396,7 +393,7 @@ const ProductDetailPage = () => {
                       <Image
                         src={resolvedImg}
                         preview={false}
-                        fallback={NO_IMAGE_PLACEHOLDER}
+                        fallback={FALLBACK_PRODUCT_IMAGE}
                         width="100%"
                         height="100%"
                         style={{ objectFit: "contain" }}

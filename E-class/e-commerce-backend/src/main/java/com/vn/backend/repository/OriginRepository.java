@@ -7,4 +7,6 @@ import java.util.List;
 
 public interface OriginRepository extends JpaRepository<Origin, Long> {
     List<Origin> findByDeletedAtIsNullAndIsActiveTrue();
+    boolean existsByNameIgnoreCaseAndDeletedAtIsNull(String name);
+    boolean existsByNameIgnoreCaseAndDeletedAtIsNullAndIdNot(String name, Long id);
 }

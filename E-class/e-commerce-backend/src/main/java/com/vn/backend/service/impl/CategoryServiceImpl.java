@@ -3,6 +3,7 @@ package com.vn.backend.service.impl;
 import com.vn.backend.dto.request.CategoryRequest;
 import com.vn.backend.dto.response.CategoryResponse;
 import com.vn.backend.entity.Category;
+import com.vn.backend.exception.ConflictException;
 import com.vn.backend.repository.CategoryRepository;
 import com.vn.backend.service.CategoryService;
 import lombok.RequiredArgsConstructor;
@@ -45,8 +46,12 @@ public class CategoryServiceImpl implements CategoryService {
     @Override
     @Transactional
     public CategoryResponse createCategory(CategoryRequest request) {
+        String name = request.getName() != null ? request.getName().trim() : "";
+        if (categoryRepository.existsByNameIgnoreCaseAndDeletedAtIsNull(name)) {
+            throw new ConflictException("Danh mục đã tồn tại.");
+        }
         Category category = new Category();
-        category.setName(request.getName());
+        category.setName(name);
         category.setSizeChartUrl(request.getSizeChartUrl());
         category.setIsActive(request.getIsActive());
 
@@ -60,7 +65,11 @@ public class CategoryServiceImpl implements CategoryService {
         Category category = categoryRepository.findByIdActive(id)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy danh mục với ID: " + id));
 
-        category.setName(request.getName());
+        String name = request.getName() != null ? request.getName().trim() : "";
+        if (categoryRepository.existsByNameIgnoreCaseAndDeletedAtIsNullAndIdNot(name, id)) {
+            throw new ConflictException("Danh mục đã tồn tại.");
+        }
+        category.setName(name);
         category.setSizeChartUrl(request.getSizeChartUrl());
         category.setIsActive(request.getIsActive());
 

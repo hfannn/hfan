@@ -16,6 +16,8 @@ import java.util.List;
 import java.util.Map;
 
 import com.vn.backend.dto.request.pos.PosQuickCreateCustomerRequest;
+import com.vn.backend.security.CustomUserDetails;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 @RestController @RequestMapping("/v1/pos")
 @RequiredArgsConstructor @CrossOrigin(origins = "http://localhost:5173")
 public class PosController {
@@ -23,8 +25,11 @@ public class PosController {
     private final VnpayService vnpayService;
 
     @PostMapping("/orders")
-    public ResponseEntity<PosOrderResponse> createOrder( @Valid @RequestBody PosCreateOrderRequest request ) throws Exception {
-        return ResponseEntity.ok(posService.createOrder(request));
+    public ResponseEntity<PosOrderResponse> createOrder(
+            @Valid @RequestBody PosCreateOrderRequest request,
+            @AuthenticationPrincipal CustomUserDetails userDetails
+    ) throws Exception {
+        return ResponseEntity.ok(posService.createOrder(request, userDetails.getUserId()));
     }
     @GetMapping("/orders/drafts")
     public ResponseEntity<List<PosOrderResponse>> getDraftOrders() {

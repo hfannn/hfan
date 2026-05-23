@@ -10,7 +10,7 @@ import java.util.List;
 
 public interface PosService {
 
-    PosOrderResponse createOrder(PosCreateOrderRequest request) throws Exception;
+    PosOrderResponse createOrder(PosCreateOrderRequest request, Long userId) throws Exception;
 
     List<PosOrderResponse> getDraftOrders();
 

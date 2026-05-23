@@ -1,7 +1,11 @@
 import { Card, Space, Tag, Tooltip, Typography } from "antd";
 import { Link } from "react-router-dom";
 import { ProductList } from "../product.model";
-import { resolveImageUrl } from "@/utils/utils";
+import {
+  FALLBACK_PRODUCT_IMAGE,
+  handleImageError,
+  resolveImageUrl,
+} from "@/utils/utils";
 
 const { Text } = Typography;
 
@@ -19,9 +23,6 @@ interface ProductCardProps {
   product: ProductCardData;
   mode?: ProductCardMode;
 }
-
-const fallbackImage =
-  "data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='480' height='360' viewBox='0 0 480 360'%3E%3Crect width='480' height='360' fill='%23f3f6fb'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' fill='%23667085' font-size='22'%3ENo Image%3C/text%3E%3C/svg%3E";
 
 export const money = (value?: number | null) => {
   if (value == null || Number.isNaN(Number(value))) {
@@ -66,11 +67,8 @@ const ProductCard = ({ product, mode = "normal" }: ProductCardProps) => {
           )}
           <img
             alt={product.name}
-            src={imageUrl || fallbackImage}
-            onError={(event) => {
-              event.currentTarget.onerror = null;
-              event.currentTarget.src = fallbackImage;
-            }}
+            src={imageUrl || FALLBACK_PRODUCT_IMAGE}
+            onError={handleImageError}
           />
         </Link>
       }

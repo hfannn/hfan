@@ -78,12 +78,12 @@ public class DiscountServiceImpl implements DiscountService {
     @Transactional
     public ValidateDiscountResponse validateDiscountForConsume(String code, BigDecimal subtotal, Long userId) {
         if (code == null || code.isBlank()) {
-            throw new InvalidRequestException("Ma giam gia khong duoc de trong.");
+            throw new InvalidRequestException("Mã giảm giá không được để trống.");
         }
         String normalizedCode = normalizeCode(code);
         Customer customer = resolveCustomer(userId);
         Coupon lockedCoupon = couponRepository.findByCodeForUpdate(normalizedCode)
-                .orElseThrow(() -> new InvalidRequestException("Ma giam gia khong ton tai."));
+                .orElseThrow(() -> new InvalidRequestException("Mã giảm giá không tồn tại."));
         return validateCoupon(lockedCoupon, customer, defaultZero(subtotal));
     }
 

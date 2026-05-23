@@ -71,17 +71,17 @@ public class UserServiceImpl implements UserService {
     public void createUser(UserCreateRequest req) {
 
         if (profileRepository.existsByPhone(req.getPhone()))
-            throw new RuntimeException("Số điện thoại đã tồn tại");
+            throw new RuntimeException("Số điện thoại đã được sử dụng.");
 
         if (userRepository.existsByUsername(req.getUsername()))
-            throw new RuntimeException("Username đã tồn tại");
+            throw new RuntimeException("Tên đăng nhập đã tồn tại.");
 
         if (userRepository.existsByEmail(req.getEmail()))
-            throw new RuntimeException("Email đã tồn tại");
+            throw new RuntimeException("Email đã được sử dụng.");
 
         double salary = req.getSalary() != null ? req.getSalary() : 0.0;
         if (salary < 0)
-            throw new RuntimeException("Lương không hợp lệ");
+            throw new RuntimeException("Mức lương không hợp lệ.");
 
         Role role = roleRepository.findById(req.getRoleId())
                 .orElseThrow(() -> new RuntimeException("Role không tồn tại"));
@@ -131,7 +131,7 @@ public class UserServiceImpl implements UserService {
     public void updateStatus(Long id, UpdateUserStatusRequest request) {
 
         User user = userRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("USER_NOT_FOUND"));
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy người dùng."));
 
         user.setIsActive(request.getIsActive());
         userRepository.save(user);
@@ -143,10 +143,10 @@ public class UserServiceImpl implements UserService {
     public void deleteUser(Long id) {
 
         User user = userRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("USER_NOT_FOUND"));
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy người dùng."));
 
         if (user.getDeletedAt() != null) {
-            throw new RuntimeException("USER_ALREADY_DELETED");
+            throw new RuntimeException("Tài khoản đã bị xóa.");
         }
 
         user.setDeletedAt(OffsetDateTime.now());
@@ -157,10 +157,10 @@ public class UserServiceImpl implements UserService {
     public void restoreUser(Long id) {
 
         User user = userRepository.findByIdIncludingDeleted(id)
-                .orElseThrow(() -> new RuntimeException("USER_NOT_FOUND"));
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy người dùng."));
 
         if (user.getDeletedAt() == null) {
-            throw new RuntimeException("USER_NOT_DELETED");
+            throw new RuntimeException("Tài khoản chưa bị xóa.");
         }
 
         user.setDeletedAt(null);
@@ -171,7 +171,7 @@ public class UserServiceImpl implements UserService {
     public void updateUser(Long id, UpdateUserRequest request) {
 
         User user = userRepository.findDetailById(id)
-                .orElseThrow(() -> new RuntimeException("USER_NOT_FOUND"));
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy người dùng."));
 
         UserProfile profile = user.getUserProfile();
 
@@ -182,7 +182,7 @@ public class UserServiceImpl implements UserService {
                     && !user.getEmail().equals(request.getEmail())) {
                 throw new ResponseStatusException(
                         HttpStatus.BAD_REQUEST,
-                        "Email đã tồn tại"
+                        "Email đã được sử dụng."
                 );
             }
             user.setEmail(request.getEmail());
@@ -190,7 +190,7 @@ public class UserServiceImpl implements UserService {
 
         if (request.getRoleId() != null) {
             Role role = roleRepository.findById(request.getRoleId())
-                    .orElseThrow(() -> new RuntimeException("ROLE_NOT_FOUND"));
+                    .orElseThrow(() -> new RuntimeException("Không tìm thấy vai trò."));
 
             user.setRole(role);
             employeeOpt.ifPresent(emp -> emp.setRole(role));
@@ -203,7 +203,7 @@ public class UserServiceImpl implements UserService {
         if (request.getPhone() != null) {
             if (profileRepository.existsByPhone(request.getPhone())
                     && !request.getPhone().equals(profile.getPhone())) {
-                throw new RuntimeException("Số điện thoại đã tồn tại");
+                throw new RuntimeException("Số điện thoại đã được sử dụng.");
             }
 
             profile.setPhone(request.getPhone());
@@ -219,7 +219,7 @@ public class UserServiceImpl implements UserService {
 
         if (request.getSalary() != null) {
             if (request.getSalary() < 0)
-                throw new RuntimeException("Lương không hợp lệ");
+                throw new RuntimeException("Mức lương không hợp lệ.");
 
             employeeOpt.ifPresent(emp -> emp.setSalary(request.getSalary()));
         }

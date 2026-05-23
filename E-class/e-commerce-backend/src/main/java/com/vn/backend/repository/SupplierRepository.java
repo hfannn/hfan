@@ -9,4 +9,6 @@ import java.util.List;
 @Repository
 public interface SupplierRepository extends JpaRepository<Supplier, Long> {
     List<Supplier> findByDeletedAtIsNullAndIsActiveTrue();
+    boolean existsByCode(String code);
+    boolean existsByCodeAndIdNot(String code, Long id);
 }

@@ -37,6 +37,9 @@ public class Coupon {
     @Column(name = "usage_limit")
     private Integer usageLimit;
 
+    @Column(name = "usage_limit_per_customer")
+    private Integer usageLimitPerCustomer;
+
     @Column(name = "start_date")
     private OffsetDateTime startDate;
 

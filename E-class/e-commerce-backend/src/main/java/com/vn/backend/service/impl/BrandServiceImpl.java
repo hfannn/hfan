@@ -3,6 +3,7 @@ package com.vn.backend.service.impl;
 import com.vn.backend.dto.request.BrandRequest;
 import com.vn.backend.dto.response.BrandResponse;
 import com.vn.backend.entity.Brand;
+import com.vn.backend.exception.ConflictException;
 import com.vn.backend.repository.BrandRepository;
 import com.vn.backend.service.BrandService;
 import lombok.RequiredArgsConstructor;
@@ -45,8 +46,12 @@ public class BrandServiceImpl implements BrandService {
     @Override
     @Transactional
     public BrandResponse createBrand(BrandRequest request) {
+        String name = request.getName() != null ? request.getName().trim() : "";
+        if (brandRepository.existsByNameIgnoreCaseAndDeletedAtIsNull(name)) {
+            throw new ConflictException("Thương hiệu đã tồn tại.");
+        }
         Brand brand = new Brand();
-        brand.setName(request.getName());
+        brand.setName(name);
         brand.setIsActive(request.getIsActive());
 
         Brand savedBrand = brandRepository.save(brand);
@@ -59,7 +64,11 @@ public class BrandServiceImpl implements BrandService {
         Brand brand = brandRepository.findByIdActive(id)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy thương hiệu với ID: " + id));
 
-        brand.setName(request.getName());
+        String name = request.getName() != null ? request.getName().trim() : "";
+        if (brandRepository.existsByNameIgnoreCaseAndDeletedAtIsNullAndIdNot(name, id)) {
+            throw new ConflictException("Thương hiệu đã tồn tại.");
+        }
+        brand.setName(name);
         brand.setIsActive(request.getIsActive());
 
         Brand updatedBrand = brandRepository.save(brand);

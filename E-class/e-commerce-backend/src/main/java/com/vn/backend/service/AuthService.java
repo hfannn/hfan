@@ -7,6 +7,7 @@ import com.vn.backend.entity.Customer;
 import com.vn.backend.entity.Role;
 import com.vn.backend.entity.User;
 import com.vn.backend.entity.UserProfile;
+import com.vn.backend.exception.ConflictException;
 import com.vn.backend.repository.CustomerRepository;
 import com.vn.backend.repository.RoleRepository;
 import com.vn.backend.repository.UserProfileRepository;
@@ -30,14 +31,14 @@ public class AuthService {
 
     public LoginResponse login(LoginRequest request) {
         User user = userRepository.findByUsername(request.getUsername())
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy tài khoản."));
+                .orElseThrow(() -> new RuntimeException("Tên đăng nhập hoặc mật khẩu không đúng."));
 
         if (Boolean.FALSE.equals(user.getIsActive())) {
-            throw new RuntimeException("Account is disabled");
+            throw new RuntimeException("Tài khoản đã bị khóa.");
         }
 
         if (!passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
-            throw new RuntimeException("Wrong password");
+            throw new RuntimeException("Tên đăng nhập hoặc mật khẩu không đúng.");
         }
 
         String roleCode = user.getRole().getCode();
@@ -58,15 +59,15 @@ public class AuthService {
         String phone = request.getPhone().trim();
 
         if (userRepository.existsByUsername(username)) {
-            throw new RuntimeException("Username đã tồn tại");
+            throw new ConflictException("Tên đăng nhập đã tồn tại.");
         }
 
         if (userRepository.existsByEmail(email)) {
-            throw new RuntimeException("Email đã tồn tại");
+            throw new ConflictException("Email đã được sử dụng");
         }
 
         if (userProfileRepository.existsByPhone(phone)) {
-            throw new RuntimeException("Số điện thoại đã tồn tại");
+            throw new ConflictException("Số điện thoại đã được sử dụng");
         }
 
         Role customerRole = roleRepository.findByCode("CUSTOMER")

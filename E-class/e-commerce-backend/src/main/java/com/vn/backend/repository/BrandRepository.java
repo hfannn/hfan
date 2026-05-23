@@ -11,6 +11,8 @@ import java.util.Optional;
 
 public interface BrandRepository extends JpaRepository<Brand, Long> {
     List<Brand> findByDeletedAtIsNullAndIsActiveTrue();
+    boolean existsByNameIgnoreCaseAndDeletedAtIsNull(String name);
+    boolean existsByNameIgnoreCaseAndDeletedAtIsNullAndIdNot(String name, Long id);
     @Query("SELECT b FROM Brand b WHERE b.deletedAt IS NULL")
     Page<Brand> findAllActive(Pageable pageable);
 

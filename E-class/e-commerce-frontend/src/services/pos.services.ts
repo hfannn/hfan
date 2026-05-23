@@ -106,7 +106,6 @@ export interface PosCheckoutValidationResponse {
 }
 
 export interface PosCreateOrderRequest {
-  employeeId: number;
   customerId?: number | null;
   storeId: number;
   note?: string;

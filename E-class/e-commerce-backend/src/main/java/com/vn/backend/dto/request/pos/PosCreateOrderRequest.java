@@ -6,8 +6,7 @@ import lombok.Data;
 @Data
 public class PosCreateOrderRequest {
 
-    @NotNull(message = "employeeId không được để trống")
-    private Long employeeId;
+    private Long employeeId; // ignored — employee is resolved from JWT on the server
 
     private Long customerId;
 

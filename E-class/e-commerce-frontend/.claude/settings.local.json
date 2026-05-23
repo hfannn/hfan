@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//d/shoe-management/E-class/e-commerce-backend/src/main/java/com/vn/backend/repository/**)",
+      "Read(//d/shoe-management/E-class/e-commerce-backend/src/main/java/com/vn/backend/controller/**)"
+    ],
+    "additionalDirectories": [
+      "d:\\shoe-management\\E-class\\e-commerce-backend\\src\\main\\java\\com\\vn\\backend\\controller"
+    ]
+  }
+}

@@ -84,6 +84,7 @@ public class OrderController {
         return ResponseEntity.ok(orderService.getOrderDetailsById(id, userDetails.getUserId()));
     }
 
+    @PreAuthorize("hasAnyRole('ADMIN','STAFF')")
     @GetMapping
     public ResponseEntity<Page<OrderResponse>> getAllOrders(Pageable pageable) {
         return ResponseEntity.ok(orderService.getAllOrders(pageable));

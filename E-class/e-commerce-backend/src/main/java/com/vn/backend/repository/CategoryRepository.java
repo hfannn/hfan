@@ -11,6 +11,8 @@ import java.util.Optional;
 
 public interface CategoryRepository extends JpaRepository<Category, Long> {
     List<Category> findByDeletedAtIsNullAndIsActiveTrue();
+    boolean existsByNameIgnoreCaseAndDeletedAtIsNull(String name);
+    boolean existsByNameIgnoreCaseAndDeletedAtIsNullAndIdNot(String name, Long id);
     @Query("SELECT c FROM Category c WHERE c.deletedAt IS NULL")
     Page<Category> findAllActive(Pageable pageable);
 

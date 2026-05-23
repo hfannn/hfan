@@ -7,12 +7,14 @@ import com.vn.backend.dto.response.ProductCreatedResponse;
 import com.vn.backend.dto.response.ProductDetailResponse;
 import com.vn.backend.dto.response.ProductListResponse;
 import com.vn.backend.entity.Product;
+import com.vn.backend.security.CustomUserDetails;
 import com.vn.backend.service.ProductService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -125,9 +127,16 @@ public class ProductController {
     @GetMapping("/{id}")
     public ResponseEntity<ProductDetailResponse> getProductDetail(
             @PathVariable Long id,
-            @RequestParam(defaultValue = "false") boolean includeInactive
+            @RequestParam(defaultValue = "false") boolean includeInactive,
+            @AuthenticationPrincipal CustomUserDetails userDetails
     ) {
-        return ResponseEntity.ok(productService.getProductDetail(id, includeInactive));
+        ProductDetailResponse response = productService.getProductDetail(id, includeInactive);
+        boolean isAdminOrStaff = userDetails != null && userDetails.getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN") || a.getAuthority().equals("ROLE_STAFF"));
+        if (!isAdminOrStaff && response.getVariants() != null) {
+            response.getVariants().forEach(v -> v.setCostPrice(null));
+        }
+        return ResponseEntity.ok(response);
     }
 
     @PreAuthorize("hasRole('ADMIN')")

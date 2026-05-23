@@ -26,7 +26,6 @@ import {
 } from "@ant-design/icons";
 import { Key, useEffect, useMemo, useState } from "react";
 import AddProductForm from "@/layouts/components/AddProductForm";
-import { API_BASE_URL } from "@/services/axiosClient";
 import { useAuth } from "@/services/AuthContext";
 import {
   productService,
@@ -34,6 +33,7 @@ import {
 } from "@/services/product.service";
 import EditProductModal from "./EditProductModal";
 import VariantDetailModal from "./VariantDetailModal";
+import { FALLBACK_PRODUCT_IMAGE, resolveImageUrl } from "@/utils/utils";
 
 interface ProductList {
   id: number;
@@ -468,18 +468,6 @@ const ProductManagementPage = () => {
     setVariantDetailRefreshKey((prev) => prev + 1);
   };
 
-  const getImageUrl = (imageUrl?: string) => {
-    if (!imageUrl) {
-      return "";
-    }
-
-    if (imageUrl.startsWith("http")) {
-      return imageUrl;
-    }
-
-    return `${API_BASE_URL}${imageUrl}`;
-  };
-
   const columns = [
     {
       title: "Ảnh",
@@ -491,25 +479,18 @@ const ProductManagementPage = () => {
           <Image
             width={60}
             height={60}
-            src={getImageUrl(imageUrl)}
+            src={resolveImageUrl(imageUrl)}
+            fallback={FALLBACK_PRODUCT_IMAGE}
             style={{ objectFit: "cover", borderRadius: 8 }}
           />
         ) : (
-          <div
-            style={{
-              width: 60,
-              height: 60,
-              borderRadius: 8,
-              background: "#f5f5f5",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              color: "#999",
-              fontSize: 12,
-            }}
-          >
-            No image
-          </div>
+          <Image
+            width={60}
+            height={60}
+            src={FALLBACK_PRODUCT_IMAGE}
+            preview={false}
+            style={{ objectFit: "cover", borderRadius: 8 }}
+          />
         ),
     },
     {

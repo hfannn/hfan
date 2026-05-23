@@ -25,6 +25,7 @@ import {
   formatKnownVariantAttributes,
   normalizeProductAttributeText,
 } from "@/utils/productAttributeLabel";
+import { FALLBACK_PRODUCT_IMAGE, resolveImageUrl } from "@/utils/utils";
 
 const { Title, Text } = Typography;
 
@@ -113,18 +114,6 @@ const getVoucherDiscountAmount = (order: OrderDetail) =>
       order.discountAmount ??
       0,
   );
-
-const resolveImageUrl = (imageUrl?: string) => {
-  if (!imageUrl) {
-    return "https://via.placeholder.com/60";
-  }
-
-  if (/^https?:\/\//i.test(imageUrl)) {
-    return imageUrl;
-  }
-
-  return `${import.meta.env.VITE_API_BASE_URL || "http://localhost:8081/api"}${imageUrl}`;
-};
 
 const getStatusMeta = (status: string) => {
   const statusMap: Record<string, { color: string; text: string }> = {
@@ -261,7 +250,7 @@ const OrderDetailModal = ({
             <Image
               width={60}
               src={resolveImageUrl(record.productImage || record.imageUrl)}
-              fallback="https://via.placeholder.com/60"
+              fallback={FALLBACK_PRODUCT_IMAGE}
               preview={false}
               style={{ marginRight: 12, borderRadius: 8, objectFit: "cover" }}
             />
@@ -522,7 +511,7 @@ const OrderDetailModal = ({
                 src={resolveImageUrl(
                   reviewingItem.productImage || reviewingItem.imageUrl,
                 )}
-                fallback="https://via.placeholder.com/72"
+                fallback={FALLBACK_PRODUCT_IMAGE}
                 preview={false}
                 style={{ borderRadius: 8, objectFit: "cover" }}
               />

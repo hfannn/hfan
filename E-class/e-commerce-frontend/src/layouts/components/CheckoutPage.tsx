@@ -43,7 +43,7 @@ import {
   getProvinces,
   getWards,
 } from "@/services/ghnShippingService";
-import { resolveImageUrl } from "@/utils/utils";
+import { handleImageError, resolveImageUrl } from "@/utils/utils";
 import { formatKnownVariantAttributes } from "@/utils/productAttributeLabel";
 import VoucherSelectorModal, {
   buildVoucherOptions,
@@ -1770,7 +1770,13 @@ const CheckoutPage = () => {
                             <Avatar
                               shape="square"
                               size={72}
-                              src={resolveImageUrl(item.imageUrl)}
+                              src={
+                                <img
+                                  src={resolveImageUrl(item.imageUrl)}
+                                  alt={item.productName}
+                                  onError={handleImageError}
+                                />
+                              }
                               style={{ borderRadius: 12 }}
                             />
                           }

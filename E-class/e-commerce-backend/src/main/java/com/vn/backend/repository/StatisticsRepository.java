@@ -47,7 +47,8 @@ public interface StatisticsRepository extends JpaRepository<Order, Integer> {
             FROM orders o
             JOIN paid_orders po ON po.order_id = o.id
             JOIN order_items oi ON oi.order_id = o.id
-            WHERE (
+            WHERE UPPER(o.status) = 'COMPLETED'
+              AND (
                     :orderType IS NULL
                     OR :orderType = 'ALL'
                     OR UPPER(o.order_type) = UPPER(:orderType)
@@ -105,7 +106,8 @@ public interface StatisticsRepository extends JpaRepository<Order, Integer> {
             FROM orders o
             JOIN paid_orders po ON po.order_id = o.id
             JOIN order_items oi ON oi.order_id = o.id
-            WHERE (
+            WHERE UPPER(o.status) = 'COMPLETED'
+              AND (
                     :orderType IS NULL
                     OR :orderType = 'ALL'
                     OR UPPER(o.order_type) = UPPER(:orderType)
@@ -163,7 +165,8 @@ public interface StatisticsRepository extends JpaRepository<Order, Integer> {
             FROM orders o
             JOIN paid_orders po ON po.order_id = o.id
             JOIN order_items oi ON oi.order_id = o.id
-            WHERE (
+            WHERE UPPER(o.status) = 'COMPLETED'
+              AND (
                     :orderType IS NULL
                     OR :orderType = 'ALL'
                     OR UPPER(o.order_type) = UPPER(:orderType)
@@ -221,7 +224,8 @@ public interface StatisticsRepository extends JpaRepository<Order, Integer> {
             FROM orders o
             JOIN paid_orders po ON po.order_id = o.id
             JOIN order_items oi ON oi.order_id = o.id
-            WHERE (
+            WHERE UPPER(o.status) = 'COMPLETED'
+              AND (
                     :orderType IS NULL
                     OR :orderType = 'ALL'
                     OR UPPER(o.order_type) = UPPER(:orderType)
@@ -278,7 +282,8 @@ public interface StatisticsRepository extends JpaRepository<Order, Integer> {
                     JOIN products p ON p.id = pv.product_id
                     LEFT JOIN brands b ON b.id = p.brand_id
                     LEFT JOIN categories c ON c.id = p.category_id
-                    WHERE (
+                    WHERE UPPER(o.status) = 'COMPLETED'
+                      AND (
                             :orderType IS NULL
                             OR :orderType = 'ALL'
                             OR UPPER(o.order_type) = UPPER(:orderType)
@@ -325,7 +330,8 @@ public interface StatisticsRepository extends JpaRepository<Order, Integer> {
                     JOIN paid_orders po ON po.order_id = o.id
                     JOIN product_variants pv ON pv.id = oi.product_variant_id
                     JOIN products p ON p.id = pv.product_id
-                    WHERE (
+                    WHERE UPPER(o.status) = 'COMPLETED'
+                      AND (
                             :orderType IS NULL
                             OR :orderType = 'ALL'
                             OR UPPER(o.order_type) = UPPER(:orderType)
@@ -457,7 +463,8 @@ public interface StatisticsRepository extends JpaRepository<Order, Integer> {
         FROM paid_payments pp
         JOIN orders o ON o.id = pp.order_id
         LEFT JOIN payment_methods pm ON pm.id = pp.payment_method_id
-        WHERE (
+        WHERE UPPER(o.status) = 'COMPLETED'
+          AND (
                 :orderType IS NULL
                 OR :orderType = 'ALL'
                 OR UPPER(o.order_type) = UPPER(:orderType)
