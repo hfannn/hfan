@@ -1081,6 +1081,30 @@ textarea,
 }
 
 
+.dashboard-stat-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 576px) {
+  .dashboard-stat-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 992px) {
+  .dashboard-stat-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (min-width: 1200px) {
+  .dashboard-stat-grid {
+    grid-template-columns: repeat(5, 1fr);
+  }
+}
+
 button,
 a,
 .ant-btn,

@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Read(//d/shoe-management/E-class/e-commerce-backend/src/main/java/com/vn/backend/repository/**)",
-      "Read(//d/shoe-management/E-class/e-commerce-backend/src/main/java/com/vn/backend/controller/**)"
+      "Read(//d/shoe-management/E-class/e-commerce-backend/src/main/java/com/vn/backend/controller/**)",
+      "Bash(PGPASSWORD=123456 psql -h localhost -U postgres -d shoe_fix -c ' *)"
     ],
     "additionalDirectories": [
       "d:\\shoe-management\\E-class\\e-commerce-backend\\src\\main\\java\\com\\vn\\backend\\controller"

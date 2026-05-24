@@ -195,7 +195,7 @@ const RevenueStatisticPage = () => {
   };
 
   const formatCurrency = (value: number) =>
-    `${new Intl.NumberFormat("vi-VN").format(Number(value || 0))} đ`;
+    `${Math.floor(Number(value || 0)).toLocaleString("vi-VN")} đ`;
 
   const shortLabel = (text: string, max = 16) => {
     if (!text) return "";
@@ -298,7 +298,7 @@ const RevenueStatisticPage = () => {
       render: (value: string) => value || "-",
     },
     {
-      title: "SL bán",
+      title: "Số lượng bán",
       dataIndex: "totalSold",
       key: "totalSold",
       align: "right" as const,

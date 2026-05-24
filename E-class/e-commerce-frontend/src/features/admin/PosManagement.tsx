@@ -830,7 +830,7 @@ const PosManagement = () => {
       render: (value: number) => `${currency(value)} đ`,
     },
     {
-      title: "SL",
+      title: "Số lượng",
       dataIndex: "quantity",
       key: "quantity",
       width: 120,

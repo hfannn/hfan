@@ -18,7 +18,7 @@ import {
   DollarCircleOutlined,
   ShoppingCartOutlined,
   ShoppingOutlined,
-  SwapOutlined,
+  TeamOutlined,
 } from "@ant-design/icons";
 import dayjs from "dayjs";
 import { statisticsService } from "@/services/statistics.service";
@@ -202,7 +202,7 @@ const DashboardPage = () => {
   };
 
   const formatCurrency = (value: number) =>
-    `${new Intl.NumberFormat("vi-VN").format(Number(value || 0))} đ`;
+    `${Math.floor(Number(value || 0)).toLocaleString("vi-VN")} đ`;
 
   const mapStatusLabel = (status: string) => {
     switch ((status || "").toUpperCase()) {
@@ -454,14 +454,6 @@ const DashboardPage = () => {
     );
   };
 
-  const cashRevenue = useMemo(
-    () =>
-      paymentMethodData
-        .filter((item) => shortPaymentName(item) === "Tiền mặt")
-        .reduce((sum, item) => sum + Number(item.revenue || 0), 0),
-    [paymentMethodData],
-  );
-
   const topProductColumns = [
     {
       title: "Top",
@@ -639,69 +631,49 @@ const DashboardPage = () => {
       </Card>
 
       <Spin spinning={loading}>
-        <Row gutter={[16, 16]}>
-          <Col xs={24} sm={12} xl={6}>
-            <Card>
-              <Statistic
-                title="Tổng doanh thu"
-                value={Number(overview.totalRevenue || 0)}
-                formatter={(value) => formatCurrency(Number(value || 0))}
-                prefix={<DollarCircleOutlined />}
-              />
-            </Card>
-          </Col>
+        <div className="dashboard-stat-grid">
+          <Card>
+            <Statistic
+              title="Tổng doanh thu"
+              value={Number(overview.totalRevenue || 0)}
+              formatter={(value) => formatCurrency(Number(value || 0))}
+              prefix={<DollarCircleOutlined />}
+            />
+          </Card>
 
-          <Col xs={24} sm={12} xl={6}>
-            <Card>
-              <Statistic
-                title="Tổng lợi nhuận"
-                value={Number(overview.totalProfit || 0)}
-                formatter={(value) => formatCurrency(Number(value || 0))}
-                prefix={<DollarCircleOutlined />}
-              />
-            </Card>
-          </Col>
+          <Card>
+            <Statistic
+              title="Tổng lợi nhuận"
+              value={Number(overview.totalProfit || 0)}
+              formatter={(value) => formatCurrency(Number(value || 0))}
+              prefix={<DollarCircleOutlined />}
+            />
+          </Card>
 
-          <Col xs={24} sm={12} xl={6}>
-            <Card>
-              <Statistic
-                title="Doanh thu tiền mặt"
-                value={cashRevenue}
-                formatter={(value) => formatCurrency(Number(value || 0))}
-                prefix={<SwapOutlined />}
-              />
-            </Card>
-          </Col>
+          <Card>
+            <Statistic
+              title="Sản phẩm đã bán"
+              value={Number(overview.totalProductsSold || 0)}
+              prefix={<ShoppingOutlined />}
+            />
+          </Card>
 
-          <Col xs={24} sm={12} xl={6}>
-            <Card>
-              <Statistic
-                title="Sản phẩm đã bán"
-                value={Number(overview.totalProductsSold || 0)}
-                prefix={<ShoppingOutlined />}
-              />
-            </Card>
-          </Col>
+          <Card>
+            <Statistic
+              title="Tổng đơn hàng"
+              value={Number(overview.totalOrders || 0)}
+              prefix={<ShoppingCartOutlined />}
+            />
+          </Card>
 
-          <Col xs={24} sm={12} xl={6}>
-            <Card>
-              <Statistic
-                title="Tổng đơn hàng"
-                value={Number(overview.totalOrders || 0)}
-                prefix={<ShoppingCartOutlined />}
-              />
-            </Card>
-          </Col>
-
-          <Col xs={24} sm={12} xl={6}>
-            <Card>
-              <Statistic
-                title="Khách hàng mua hàng"
-                value={Number(overview.totalCustomers || 0)}
-              />
-            </Card>
-          </Col>
-        </Row>
+          <Card>
+            <Statistic
+              title="Khách hàng mua hàng"
+              value={Number(overview.totalCustomers || 0)}
+              prefix={<TeamOutlined />}
+            />
+          </Card>
+        </div>
 
         <Row gutter={[16, 16]} style={{ marginTop: 8 }}>
           <Col xs={24}>

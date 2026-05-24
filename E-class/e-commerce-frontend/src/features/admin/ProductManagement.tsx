@@ -522,12 +522,12 @@ const ProductManagementPage = () => {
         }
 
         if (record.minCostPrice === record.maxCostPrice) {
-          return `${Number(record.minCostPrice).toLocaleString("vi-VN")} VND`;
+          return `${Number(record.minCostPrice).toLocaleString("vi-VN")} đ`;
         }
 
         return `${Number(record.minCostPrice).toLocaleString("vi-VN")} - ${Number(
           record.maxCostPrice,
-        ).toLocaleString("vi-VN")} VND`;
+        ).toLocaleString("vi-VN")} đ`;
       },
     },
     {
@@ -541,12 +541,12 @@ const ProductManagementPage = () => {
         }
 
         if (record.minPrice === record.maxPrice) {
-          return `${Number(record.minPrice).toLocaleString("vi-VN")} VND`;
+          return `${Number(record.minPrice).toLocaleString("vi-VN")} đ`;
         }
 
         return `${Number(record.minPrice).toLocaleString("vi-VN")} - ${Number(
           record.maxPrice,
-        ).toLocaleString("vi-VN")} VND`;
+        ).toLocaleString("vi-VN")} đ`;
       },
     },
     {

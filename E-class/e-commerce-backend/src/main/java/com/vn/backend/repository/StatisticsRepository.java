@@ -47,7 +47,7 @@ public interface StatisticsRepository extends JpaRepository<Order, Integer> {
             FROM orders o
             JOIN paid_orders po ON po.order_id = o.id
             JOIN order_items oi ON oi.order_id = o.id
-            WHERE UPPER(o.status) = 'COMPLETED'
+            WHERE UPPER(o.status) NOT IN ('CANCELLED', 'FAILED', 'REFUNDED', 'RETURNED', 'PENDING_PAYMENT')
               AND (
                     :orderType IS NULL
                     OR :orderType = 'ALL'
@@ -106,7 +106,7 @@ public interface StatisticsRepository extends JpaRepository<Order, Integer> {
             FROM orders o
             JOIN paid_orders po ON po.order_id = o.id
             JOIN order_items oi ON oi.order_id = o.id
-            WHERE UPPER(o.status) = 'COMPLETED'
+            WHERE UPPER(o.status) NOT IN ('CANCELLED', 'FAILED', 'REFUNDED', 'RETURNED', 'PENDING_PAYMENT')
               AND (
                     :orderType IS NULL
                     OR :orderType = 'ALL'
@@ -165,7 +165,7 @@ public interface StatisticsRepository extends JpaRepository<Order, Integer> {
             FROM orders o
             JOIN paid_orders po ON po.order_id = o.id
             JOIN order_items oi ON oi.order_id = o.id
-            WHERE UPPER(o.status) = 'COMPLETED'
+            WHERE UPPER(o.status) NOT IN ('CANCELLED', 'FAILED', 'REFUNDED', 'RETURNED', 'PENDING_PAYMENT')
               AND (
                     :orderType IS NULL
                     OR :orderType = 'ALL'
@@ -224,7 +224,7 @@ public interface StatisticsRepository extends JpaRepository<Order, Integer> {
             FROM orders o
             JOIN paid_orders po ON po.order_id = o.id
             JOIN order_items oi ON oi.order_id = o.id
-            WHERE UPPER(o.status) = 'COMPLETED'
+            WHERE UPPER(o.status) NOT IN ('CANCELLED', 'FAILED', 'REFUNDED', 'RETURNED', 'PENDING_PAYMENT')
               AND (
                     :orderType IS NULL
                     OR :orderType = 'ALL'
@@ -282,7 +282,7 @@ public interface StatisticsRepository extends JpaRepository<Order, Integer> {
                     JOIN products p ON p.id = pv.product_id
                     LEFT JOIN brands b ON b.id = p.brand_id
                     LEFT JOIN categories c ON c.id = p.category_id
-                    WHERE UPPER(o.status) = 'COMPLETED'
+                    WHERE UPPER(o.status) NOT IN ('CANCELLED', 'FAILED', 'REFUNDED', 'RETURNED', 'PENDING_PAYMENT')
                       AND (
                             :orderType IS NULL
                             OR :orderType = 'ALL'
@@ -330,7 +330,7 @@ public interface StatisticsRepository extends JpaRepository<Order, Integer> {
                     JOIN paid_orders po ON po.order_id = o.id
                     JOIN product_variants pv ON pv.id = oi.product_variant_id
                     JOIN products p ON p.id = pv.product_id
-                    WHERE UPPER(o.status) = 'COMPLETED'
+                    WHERE UPPER(o.status) NOT IN ('CANCELLED', 'FAILED', 'REFUNDED', 'RETURNED', 'PENDING_PAYMENT')
                       AND (
                             :orderType IS NULL
                             OR :orderType = 'ALL'
@@ -356,7 +356,7 @@ public interface StatisticsRepository extends JpaRepository<Order, Integer> {
             FROM payments p
             JOIN orders o ON o.id = p.order_id
             WHERE p.status = 'PAID'
-              AND UPPER(COALESCE(o.status, '')) NOT IN ('CANCELLED', 'FAILED', 'REFUNDED', 'PENDING_PAYMENT')
+              AND UPPER(COALESCE(o.status, '')) NOT IN ('CANCELLED', 'FAILED', 'REFUNDED', 'RETURNED', 'PENDING_PAYMENT')
         )
         SELECT
             pr.id AS productId,
@@ -463,7 +463,7 @@ public interface StatisticsRepository extends JpaRepository<Order, Integer> {
         FROM paid_payments pp
         JOIN orders o ON o.id = pp.order_id
         LEFT JOIN payment_methods pm ON pm.id = pp.payment_method_id
-        WHERE UPPER(o.status) = 'COMPLETED'
+        WHERE UPPER(o.status) NOT IN ('CANCELLED', 'FAILED', 'REFUNDED', 'RETURNED', 'PENDING_PAYMENT')
           AND (
                 :orderType IS NULL
                 OR :orderType = 'ALL'

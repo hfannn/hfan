@@ -136,6 +136,18 @@ const ProductDetailPage = () => {
     );
   }, [product]);
 
+  const variantPriceRange = useMemo(() => {
+    if (sellableVariants.length === 0) return null;
+    const prices = sellableVariants.map(
+      (v: any) => Number(v.salePrice ?? v.unitPrice ?? v.sellingPrice),
+    ).filter((p) => Number.isFinite(p));
+    if (prices.length === 0) return null;
+    const min = Math.min(...prices);
+    const max = Math.max(...prices);
+    if (min === max) return formatMoney(min);
+    return `${formatMoney(min)} - ${formatMoney(max)}`;
+  }, [sellableVariants]);
+
   const { allSizes, allColors } =
     useMemo(() => {
       if (!product) {
@@ -438,7 +450,7 @@ const ProductDetailPage = () => {
                     )}
                 </Space>
               ) : (
-                "Chọn kích cỡ và màu sắc để xem giá"
+                variantPriceRange ?? "Chọn kích cỡ và màu sắc để xem giá"
               )}
             </Title>
 

@@ -22,7 +22,6 @@ import {
   EditOutlined,
   DeleteOutlined,
   EyeOutlined,
-  DownloadOutlined,
 } from "@ant-design/icons";
 import { useEffect, useMemo, useState } from "react";
 import { userService } from "@/services/user.service";
@@ -344,22 +343,6 @@ const UserManagementPage = () => {
             <Space wrap>
               <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
                 Thêm tài khoản
-              </Button>
-              <Button
-                icon={<EditOutlined />}
-                disabled={!editingUser}
-                onClick={() => editingUser && openEdit(editingUser)}
-              >
-                Sửa tài khoản
-              </Button>
-              <Button danger icon={<DeleteOutlined />} disabled>
-                Xóa tài khoản
-              </Button>
-              <Button
-                icon={<DownloadOutlined />}
-                onClick={() => message.info("Chưa làm export")}
-              >
-                Xuất dữ liệu
               </Button>
             </Space>
 
