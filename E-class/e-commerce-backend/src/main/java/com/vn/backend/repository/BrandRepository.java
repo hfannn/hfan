@@ -6,10 +6,17 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 
+import org.springframework.data.repository.query.Param;
+
 import java.util.List;
 import java.util.Optional;
 
 public interface BrandRepository extends JpaRepository<Brand, Long> {
+
+    // Tìm kể cả soft-deleted — bypass @Where
+    @Query("SELECT b FROM Brand b WHERE LOWER(b.name) = LOWER(:name)")
+    Optional<Brand> findByNameIgnoreCaseAll(@Param("name") String name);
+
     List<Brand> findByDeletedAtIsNullAndIsActiveTrue();
     boolean existsByNameIgnoreCaseAndDeletedAtIsNull(String name);
     boolean existsByNameIgnoreCaseAndDeletedAtIsNullAndIdNot(String name, Long id);

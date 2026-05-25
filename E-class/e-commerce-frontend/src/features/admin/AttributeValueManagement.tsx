@@ -48,6 +48,7 @@ const AttributeValueManagement = ({ code, title }: Props) => {
   const [editing, setEditing] = useState<AttributeValue | null>(null);
 
   const [keyword, setKeyword] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
   const [form] = Form.useForm<AttributeValueRequest>();
 
   const fetchAll = async () => {
@@ -139,7 +140,7 @@ const AttributeValueManagement = ({ code, title }: Props) => {
 
   const columns: ColumnsType<AttributeValue> = useMemo(
     () => [
-      { title: "ID", dataIndex: "id", width: 80 },
+      { title: "STT", key: "stt", width: 80, render: (_: any, __: any, index: number) => (currentPage - 1) * 10 + index + 1 },
       { title: safeTitle, dataIndex: "value" },
       {
         title: "Hành động",
@@ -168,7 +169,7 @@ const AttributeValueManagement = ({ code, title }: Props) => {
         ),
       },
     ],
-    [safeTitle],
+    [safeTitle, currentPage],
   );
 
   return (
@@ -198,7 +199,7 @@ const AttributeValueManagement = ({ code, title }: Props) => {
           prefix={<SearchOutlined />}
           placeholder={`Tìm ${titleLower}...`}
           value={keyword}
-          onChange={(e) => setKeyword(e.target.value)}
+          onChange={(e) => { setKeyword(e.target.value); setCurrentPage(1); }}
           allowClear
         />
       </Space>
@@ -208,7 +209,7 @@ const AttributeValueManagement = ({ code, title }: Props) => {
         loading={loading}
         columns={columns}
         dataSource={filtered}
-        pagination={{ pageSize: 10 }}
+        pagination={{ pageSize: 10, current: currentPage, onChange: (p) => setCurrentPage(p) }}
       />
 
       <Modal

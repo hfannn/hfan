@@ -36,6 +36,7 @@ const SupplierManagement = () => {
   const [editing, setEditing] = useState<Supplier | null>(null);
 
   const [keyword, setKeyword] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
   const [form] = Form.useForm<SupplierRequest>();
 
   const fetchAll = async () => {
@@ -131,7 +132,7 @@ const SupplierManagement = () => {
 
   const columns: ColumnsType<Supplier> = useMemo(
     () => [
-      { title: "ID", dataIndex: "id", width: 60 },
+      { title: "STT", key: "stt", width: 60, render: (_: any, __: any, index: number) => (currentPage - 1) * 10 + index + 1 },
       { title: "Mã NCC", dataIndex: "code", width: 120 },
       { title: "Tên nhà cung cấp", dataIndex: "name" },
       { title: "Số điện thoại", dataIndex: "phone", width: 140, render: (v: string) => v || "—" },
@@ -158,7 +159,7 @@ const SupplierManagement = () => {
         ),
       },
     ],
-    [],
+    [currentPage],
   );
 
   return (
@@ -181,7 +182,7 @@ const SupplierManagement = () => {
           prefix={<SearchOutlined />}
           placeholder="Tìm theo tên, mã, SĐT..."
           value={keyword}
-          onChange={(e) => setKeyword(e.target.value)}
+          onChange={(e) => { setKeyword(e.target.value); setCurrentPage(1); }}
           allowClear
         />
       </Space>
@@ -191,7 +192,7 @@ const SupplierManagement = () => {
         loading={loading}
         columns={columns}
         dataSource={filtered}
-        pagination={{ pageSize: 10 }}
+        pagination={{ pageSize: 10, current: currentPage, onChange: (p) => setCurrentPage(p) }}
         locale={{ emptyText: "Chưa có nhà cung cấp nào" }}
       />
 

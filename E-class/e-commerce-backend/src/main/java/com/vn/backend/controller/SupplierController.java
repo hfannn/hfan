@@ -30,9 +30,21 @@ public class SupplierController {
     @PostMapping
     public Supplier create(@RequestBody @Valid SupplierRequest req) {
         String normalizedCode = req.code().trim().toUpperCase();
-        if (supplierRepository.existsByCode(normalizedCode)) {
-            throw new ConflictException("Mã nhà cung cấp đã tồn tại.");
+
+        var existing = supplierRepository.findByCodeAll(normalizedCode);
+        if (existing.isPresent()) {
+            Supplier s = existing.get();
+            if (s.getDeletedAt() == null) {
+                throw new ConflictException("Mã nhà cung cấp đã tồn tại.");
+            }
+            // Restore soft-deleted supplier
+            s.setDeletedAt(null);
+            s.setIsActive(true);
+            s.setName(req.name().trim());
+            s.setPhone(req.phone() != null ? req.phone().trim() : null);
+            return supplierRepository.save(s);
         }
+
         Supplier s = new Supplier();
         s.setCode(normalizedCode);
         s.setName(req.name().trim());

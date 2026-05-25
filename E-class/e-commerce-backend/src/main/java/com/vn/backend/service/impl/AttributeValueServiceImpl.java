@@ -4,15 +4,17 @@ import com.vn.backend.dto.request.AttributeValueRequest;
 import com.vn.backend.dto.response.AttributeValueResponse;
 import com.vn.backend.entity.Attribute;
 import com.vn.backend.entity.AttributeValue;
+import com.vn.backend.exception.ConflictException;
+import com.vn.backend.exception.InvalidRequestException;
 import com.vn.backend.repository.AttributeRepository;
 import com.vn.backend.repository.AttributeValueRepository;
 import com.vn.backend.service.AttributeValueService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -33,18 +35,27 @@ public class AttributeValueServiceImpl implements AttributeValueService {
 
     @Override
     public AttributeValueResponse createByCode(String code, AttributeValueRequest req) {
+        if (req.getValue() == null || req.getValue().trim().isEmpty()) {
+            throw new InvalidRequestException("Giá trị không được để trống");
+        }
+
         Attribute attribute = attributeRepository.findByCodeIgnoreCase(code)
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy thuộc tính: " + code));
+                .orElseThrow(() -> new InvalidRequestException("Không tìm thấy thuộc tính: " + code));
 
         String normalizedValue = req.getValue().trim();
 
-        boolean exists = attributeValueRepository.existsByAttribute_IdAndValueIgnoreCase(
-                attribute.getId(),
-                normalizedValue
-        );
+        Optional<AttributeValue> existing = attributeValueRepository
+                .findByAttributeIdAndValueIgnoreCase(attribute.getId(), normalizedValue);
 
-        if (exists) {
-            throw new RuntimeException("Giá trị đã tồn tại: " + normalizedValue);
+        if (existing.isPresent()) {
+            AttributeValue av = existing.get();
+            if (Boolean.TRUE.equals(av.getIsActive())) {
+                throw new ConflictException(attribute.getName() + " đã tồn tại: " + normalizedValue);
+            }
+            // Restore inactive record
+            av.setIsActive(true);
+            attributeValueRepository.save(av);
+            return toResponse(av);
         }
 
         AttributeValue entity = AttributeValue.builder()
@@ -60,17 +71,15 @@ public class AttributeValueServiceImpl implements AttributeValueService {
     @Override
     public AttributeValueResponse update(Long id, AttributeValueRequest req) {
         AttributeValue entity = attributeValueRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy giá trị thuộc tính"));
+                .orElseThrow(() -> new InvalidRequestException("Không tìm thấy giá trị thuộc tính"));
 
         String normalizedValue = req.getValue().trim();
 
-        boolean duplicated = attributeValueRepository.existsByAttribute_IdAndValueIgnoreCase(
-                entity.getAttribute().getId(),
-                normalizedValue
-        );
+        Optional<AttributeValue> duplicate = attributeValueRepository
+                .findByAttributeIdAndValueIgnoreCase(entity.getAttribute().getId(), normalizedValue);
 
-        if (duplicated && !entity.getValue().equalsIgnoreCase(normalizedValue)) {
-            throw new RuntimeException("Giá trị đã tồn tại: " + normalizedValue);
+        if (duplicate.isPresent() && !duplicate.get().getId().equals(id)) {
+            throw new ConflictException(entity.getAttribute().getName() + " đã tồn tại: " + normalizedValue);
         }
 
         entity.setValue(normalizedValue);
@@ -82,7 +91,7 @@ public class AttributeValueServiceImpl implements AttributeValueService {
     @Override
     public void disable(Long id) {
         AttributeValue entity = attributeValueRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy giá trị thuộc tính"));
+                .orElseThrow(() -> new InvalidRequestException("Không tìm thấy giá trị thuộc tính"));
 
         entity.setIsActive(false);
         attributeValueRepository.save(entity);

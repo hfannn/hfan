@@ -30,9 +30,19 @@ public class OriginController {
     @PostMapping
     public Origin create(@RequestBody @Valid OriginRequest req) {
         String name = req.name().trim();
-        if (originRepository.existsByNameIgnoreCaseAndDeletedAtIsNull(name)) {
-            throw new ConflictException("Xuất xứ đã tồn tại.");
+
+        var existing = originRepository.findByNameIgnoreCaseAll(name);
+        if (existing.isPresent()) {
+            Origin origin = existing.get();
+            if (origin.getDeletedAt() == null) {
+                throw new ConflictException("Xuất xứ đã tồn tại.");
+            }
+            // Restore soft-deleted origin
+            origin.setDeletedAt(null);
+            origin.setIsActive(true);
+            return originRepository.save(origin);
         }
+
         Origin origin = new Origin();
         origin.setName(name);
         origin.setIsActive(true);

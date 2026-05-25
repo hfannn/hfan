@@ -47,15 +47,24 @@ public class BrandServiceImpl implements BrandService {
     @Transactional
     public BrandResponse createBrand(BrandRequest request) {
         String name = request.getName() != null ? request.getName().trim() : "";
-        if (brandRepository.existsByNameIgnoreCaseAndDeletedAtIsNull(name)) {
-            throw new ConflictException("Thương hiệu đã tồn tại.");
+
+        var existing = brandRepository.findByNameIgnoreCaseAll(name);
+        if (existing.isPresent()) {
+            Brand brand = existing.get();
+            if (brand.getDeletedAt() == null) {
+                throw new ConflictException("Thương hiệu đã tồn tại.");
+            }
+            // Restore soft-deleted brand
+            brand.setDeletedAt(null);
+            brand.setIsActive(true);
+            return mapToResponse(brandRepository.save(brand));
         }
+
         Brand brand = new Brand();
         brand.setName(name);
         brand.setIsActive(request.getIsActive());
 
-        Brand savedBrand = brandRepository.save(brand);
-        return mapToResponse(savedBrand);
+        return mapToResponse(brandRepository.save(brand));
     }
 
     @Override

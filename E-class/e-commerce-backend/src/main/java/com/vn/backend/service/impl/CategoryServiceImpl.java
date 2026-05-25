@@ -47,16 +47,26 @@ public class CategoryServiceImpl implements CategoryService {
     @Transactional
     public CategoryResponse createCategory(CategoryRequest request) {
         String name = request.getName() != null ? request.getName().trim() : "";
-        if (categoryRepository.existsByNameIgnoreCaseAndDeletedAtIsNull(name)) {
-            throw new ConflictException("Danh mục đã tồn tại.");
+
+        var existing = categoryRepository.findByNameIgnoreCaseAll(name);
+        if (existing.isPresent()) {
+            Category category = existing.get();
+            if (category.getDeletedAt() == null) {
+                throw new ConflictException("Danh mục đã tồn tại.");
+            }
+            // Restore soft-deleted category
+            category.setDeletedAt(null);
+            category.setIsActive(true);
+            category.setSizeChartUrl(request.getSizeChartUrl());
+            return mapToResponse(categoryRepository.save(category));
         }
+
         Category category = new Category();
         category.setName(name);
         category.setSizeChartUrl(request.getSizeChartUrl());
         category.setIsActive(request.getIsActive());
 
-        Category savedCategory = categoryRepository.save(category);
-        return mapToResponse(savedCategory);
+        return mapToResponse(categoryRepository.save(category));
     }
 
     @Override

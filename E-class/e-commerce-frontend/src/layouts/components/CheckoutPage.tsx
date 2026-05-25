@@ -812,7 +812,13 @@ const CheckoutPage = () => {
         return;
       }
 
-      if (shippingError) {
+      const addressForQuote = trimText(selectedAddress);
+      if (
+        !selectedProvinceId ||
+        !selectedDistrictId ||
+        !selectedWardCode ||
+        !isValidAddressDetail(addressForQuote)
+      ) {
         return;
       }
 
@@ -860,7 +866,6 @@ const CheckoutPage = () => {
     selectedProvinceName,
     selectedDistrictName,
     selectedWardName,
-    shippingError,
   ]);
 
   useEffect(() => {
@@ -1429,7 +1434,6 @@ const CheckoutPage = () => {
               <Form.Item
                 name="customerName"
                 label="Họ và tên người nhận"
-                normalize={(value) => trimText(value)}
                 rules={[
                   { required: true, message: "Vui lòng nhập họ tên." },
                   {

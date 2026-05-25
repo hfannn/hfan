@@ -73,7 +73,7 @@ export default function BrandManagementPage() {
   };
 
   const columns = [
-    { title: "ID", dataIndex: "id", width: 80 },
+    { title: "STT", key: "stt", width: 80, render: (_: any, __: any, index: number) => index + 1 },
     { title: "Tên thương hiệu", dataIndex: "name" },
     {
       title: "Kích hoạt",

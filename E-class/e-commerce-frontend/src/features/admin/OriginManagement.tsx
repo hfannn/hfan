@@ -36,6 +36,7 @@ const OriginManagement = () => {
   const [editing, setEditing] = useState<Origin | null>(null);
 
   const [keyword, setKeyword] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
   const [form] = Form.useForm<OriginRequest>();
 
   const fetchAll = async () => {
@@ -118,7 +119,7 @@ const OriginManagement = () => {
 
   const columns: ColumnsType<Origin> = useMemo(
     () => [
-      { title: "ID", dataIndex: "id", width: 80 },
+      { title: "STT", key: "stt", width: 80, render: (_: any, __: any, index: number) => (currentPage - 1) * 10 + index + 1 },
       { title: "Tên xuất xứ", dataIndex: "name" },
       {
         title: "Hành động",
@@ -143,7 +144,7 @@ const OriginManagement = () => {
         ),
       },
     ],
-    [],
+    [currentPage],
   );
 
   return (
@@ -166,7 +167,7 @@ const OriginManagement = () => {
           prefix={<SearchOutlined />}
           placeholder="Tìm xuất xứ..."
           value={keyword}
-          onChange={(e) => setKeyword(e.target.value)}
+          onChange={(e) => { setKeyword(e.target.value); setCurrentPage(1); }}
           allowClear
         />
       </Space>
@@ -176,7 +177,7 @@ const OriginManagement = () => {
         loading={loading}
         columns={columns}
         dataSource={filtered}
-        pagination={{ pageSize: 10 }}
+        pagination={{ pageSize: 10, current: currentPage, onChange: (p) => setCurrentPage(p) }}
         locale={{ emptyText: "Chưa có xuất xứ nào" }}
       />
 

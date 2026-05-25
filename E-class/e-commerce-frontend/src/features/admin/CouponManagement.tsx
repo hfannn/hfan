@@ -65,6 +65,8 @@ type CouponFormRuleFactory = (form: FormInstance) => RuleObject;
 const CouponManagementPage = () => {
   const [modalVisible, setModalVisible] = useState<boolean>(false);
   const [editingCoupon, setEditingCoupon] = useState<any>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const actionRef = useRef<ActionType>(null);
   const formRef = useRef<ProFormInstance>();
 
@@ -140,7 +142,13 @@ const CouponManagementPage = () => {
   };
 
   const columns: ProColumns<Coupon>[] = [
-    { title: "ID", dataIndex: "id", width: 64, search: false },
+    {
+      title: "STT",
+      key: "stt",
+      width: 70,
+      search: false,
+      render: (_: any, __: any, index: number) => (currentPage - 1) * pageSize + index + 1,
+    },
     { title: "Mã giảm giá", dataIndex: "code", copyable: true },
     {
       title: "Loại giảm",
@@ -271,7 +279,13 @@ const CouponManagementPage = () => {
           };
         }}
         rowKey="id"
-        pagination={{ pageSize: 10 }}
+        pagination={{
+          pageSize: pageSize,
+          onChange: (page, size) => {
+            setCurrentPage(page);
+            setPageSize(size ?? 10);
+          },
+        }}
         headerTitle="Quản lý mã giảm giá"
         toolBarRender={() => [
           <Button

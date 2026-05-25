@@ -7,9 +7,20 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface AttributeValueRepository extends JpaRepository<AttributeValue, Long> {
+
+    @Query("""
+        SELECT av FROM AttributeValue av
+        WHERE av.attribute.id = :attributeId
+          AND LOWER(TRIM(av.value)) = LOWER(TRIM(:value))
+    """)
+    Optional<AttributeValue> findByAttributeIdAndValueIgnoreCase(
+            @Param("attributeId") Long attributeId,
+            @Param("value") String value);
+
 
     @Query("""
         select av
