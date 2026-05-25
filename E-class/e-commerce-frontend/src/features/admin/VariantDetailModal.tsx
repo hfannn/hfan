@@ -735,9 +735,9 @@ const VariantDetailModal: React.FC<VariantDetailModalProps> = ({
                       )
                     }
                     options={[
-                      { label: "Tat ca", value: "all" },
-                      { label: "Con hang", value: "inStock" },
-                      { label: "Het hang", value: "outOfStock" },
+                      { label: "Tất cả", value: "all" },
+                      { label: "Còn hàng", value: "inStock" },
+                      { label: "Hết hàng", value: "outOfStock" },
                     ]}
                   />
                 </Col>
@@ -752,9 +752,9 @@ const VariantDetailModal: React.FC<VariantDetailModalProps> = ({
                       )
                     }
                     options={[
-                      { label: "Tat ca", value: "all" },
-                      { label: "Dang ban", value: "active" },
-                      { label: "Ngung", value: "inactive" },
+                      { label: "Tất cả", value: "all" },
+                      { label: "Đang bán", value: "active" },
+                      { label: "Ngừng", value: "inactive" },
                     ]}
                   />
                 </Col>

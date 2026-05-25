@@ -187,27 +187,6 @@ const FilterSidebar = ({
         })}
       </div>
 
-      {materials.length > 0 && (
-        <>
-          <Divider />
-          <Title level={5}>Chất liệu</Title>
-          <div className="filter-chip-group">
-            {materials.map((item) => {
-              const value = getValue(item);
-              return (
-                <Button
-                  key={value}
-                  size="small"
-                  type={filters.material === value ? "primary" : "default"}
-                  onClick={() => onChange({ material: filters.material === value ? null : value })}
-                >
-                  {getLabel(item)}
-                </Button>
-              );
-            })}
-          </div>
-        </>
-      )}
     </aside>
   );
 };

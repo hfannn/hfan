@@ -564,7 +564,7 @@ const DashboardPage = () => {
           Tổng quan
         </Title>
         <Text type="secondary">
-          Doanh thu đang được tính theo tiền hàng thực thu, không cộng phí ship.
+          
         </Text>
       </div>
 

@@ -42,6 +42,7 @@ import com.vn.backend.repository.OrderRepository;
 import com.vn.backend.repository.OrderStatusHistoryRepository;
 import com.vn.backend.repository.PaymentMethodRepository;
 import com.vn.backend.repository.PaymentRepository;
+import com.vn.backend.repository.ProductImageRepository;
 import com.vn.backend.repository.ProductVariantRepository;
 import com.vn.backend.repository.ReviewRepository;
 import com.vn.backend.repository.UserRepository;
@@ -82,6 +83,7 @@ public class OrderServiceImpl implements OrderService {
     private final OrderRepository orderRepository;
     private final OrderItemRepository orderItemRepository;
     private final ProductVariantRepository productVariantRepository;
+    private final ProductImageRepository productImageRepository;
     private final CustomerRepository customerRepository;
     private final UserRepository userRepository;
     private final CartItemRepository cartItemRepository;
@@ -450,15 +452,7 @@ public class OrderServiceImpl implements OrderService {
     private OrderItemResponse convertToOrderItemResponse(OrderItem item) {
         ProductVariant variant = item.getProductVariant();
 
-        String imageUrl = null;
-        if (variant != null && variant.getImages() != null) {
-            imageUrl = variant.getImages().stream()
-                    .filter(ProductImage::getIsPrimary)
-                    .findFirst()
-                    .or(() -> variant.getImages().stream().findFirst())
-                    .map(ProductImage::getImageUrl)
-                    .orElse(null);
-        }
+        String imageUrl = resolveItemImageUrl(variant);
 
         BigDecimal unitPrice = defaultZero(item.getPriceAtPurchase());
         BigDecimal originalPrice = defaultZero(item.getOriginalPriceAtPurchase());
@@ -504,6 +498,24 @@ public class OrderServiceImpl implements OrderService {
         );
         response.setCanReview(isReviewableOrderStatus(item.getOrder().getStatus()) && !Boolean.TRUE.equals(response.getReviewed()));
         return response;
+    }
+
+    private String resolveItemImageUrl(ProductVariant variant) {
+        if (variant == null) return null;
+        // 1+2: primary hoặc đầu tiên của variant
+        Optional<ProductImage> variantImage = productImageRepository
+                .findFirstByProductVariant_IdOrderByIsPrimaryDescDisplayOrderAsc(variant.getId());
+        if (variantImage.isPresent()) {
+            return variantImage.get().getImageUrl();
+        }
+        // 3+4: primary hoặc đầu tiên của product cha
+        if (variant.getProduct() != null) {
+            return productImageRepository
+                    .findFirstByProduct_IdOrderByIsPrimaryDescDisplayOrderAsc(variant.getProduct().getId())
+                    .map(ProductImage::getImageUrl)
+                    .orElse(null);
+        }
+        return null;
     }
 
     private String resolveVariantAttribute(ProductVariant variant, String attributeCode) {

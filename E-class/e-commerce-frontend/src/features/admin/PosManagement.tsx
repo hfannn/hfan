@@ -1119,8 +1119,8 @@ const PosManagement = () => {
                   Bán hàng tại quầy (POS)
                 </Title>
                 <Text type="secondary">
-                  Khu vực phía trên là hóa đơn đang xử lý, phía dưới là danh
-                  sách sản phẩm để thao tác nhanh và trực quan hơn.
+                
+                  
                 </Text>
               </Space>
             </Col>

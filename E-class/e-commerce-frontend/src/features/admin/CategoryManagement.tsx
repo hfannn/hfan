@@ -80,18 +80,6 @@ export default function CategoryManagementPage() {
     { title: "ID", dataIndex: "id", width: 80 },
     { title: "Tên danh mục", dataIndex: "name" },
     {
-      title: "Bảng kích cỡ",
-      dataIndex: "sizeChartUrl",
-      render: (v: string) =>
-        v ? (
-          <a href={v} target="_blank" rel="noreferrer">
-            Xem
-          </a>
-        ) : (
-          "-"
-        ),
-    },
-    {
       title: "Kích hoạt",
       dataIndex: "isActive",
       width: 120,

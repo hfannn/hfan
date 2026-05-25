@@ -16,6 +16,7 @@ import com.vn.backend.enums.CartStatus;
 import com.vn.backend.repository.CartItemRepository;
 import com.vn.backend.repository.CartRepository;
 import com.vn.backend.repository.CustomerRepository;
+import com.vn.backend.repository.ProductImageRepository;
 import com.vn.backend.repository.ProductVariantRepository;
 import com.vn.backend.repository.UserRepository;
 import com.vn.backend.service.CartService;
@@ -41,6 +42,7 @@ public class CartServiceImpl implements CartService {
     private final CustomerRepository customerRepository;
     private final UserRepository userRepository;
     private final ProductPriceService productPriceService;
+    private final ProductImageRepository productImageRepository;
 
     @Override
     public CartResponse addToCart(Long userId, AddCartRequest request) {
@@ -243,15 +245,7 @@ public class CartServiceImpl implements CartService {
         for (CartItem item : items) {
             ProductVariant variant = item.getProductVariant();
 
-            String imageUrl = null;
-            if (variant.getImages() != null) {
-                imageUrl = variant.getImages().stream()
-                        .filter(productImage -> Boolean.TRUE.equals(productImage.getIsPrimary()))
-                        .findFirst()
-                        .or(() -> variant.getImages().stream().findFirst())
-                        .map(ProductImage::getImageUrl)
-                        .orElse(null);
-            }
+            String imageUrl = resolveCartItemImageUrl(variant);
 
             String size = extractAttributeValue(variant, "SIZE");
             String color = extractAttributeValue(variant, "COLOR");
@@ -326,6 +320,24 @@ public class CartServiceImpl implements CartService {
         item.setPromotionId(price.getPromotionId());
         item.setLineTotal(lineTotal);
         return price;
+    }
+
+    private String resolveCartItemImageUrl(ProductVariant variant) {
+        if (variant == null) return null;
+        // 1+2: ảnh primary hoặc đầu tiên của variant
+        Optional<ProductImage> variantImage = productImageRepository
+                .findFirstByProductVariant_IdOrderByIsPrimaryDescDisplayOrderAsc(variant.getId());
+        if (variantImage.isPresent()) {
+            return variantImage.get().getImageUrl();
+        }
+        // 3+4: ảnh primary hoặc đầu tiên của product cha
+        if (variant.getProduct() != null) {
+            return productImageRepository
+                    .findFirstByProduct_IdOrderByIsPrimaryDescDisplayOrderAsc(variant.getProduct().getId())
+                    .map(ProductImage::getImageUrl)
+                    .orElse(null);
+        }
+        return null;
     }
 
     private BigDecimal defaultZero(BigDecimal value) {

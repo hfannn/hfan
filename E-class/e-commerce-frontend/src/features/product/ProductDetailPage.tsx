@@ -282,6 +282,11 @@ const ProductDetailPage = () => {
       return;
     }
 
+    if (!isAuthenticated) {
+      message.warning("Vui lòng đăng nhập để thêm sản phẩm vào giỏ hàng.");
+      return;
+    }
+
     Modal.confirm({
       title: "Xác nhận thêm vào giỏ hàng?",
       content: `Bạn có muốn thêm ${quantity} sản phẩm vào giỏ hàng không?`,
@@ -303,10 +308,15 @@ const ProductDetailPage = () => {
           message.success("Đã thêm vào giỏ hàng.");
           fetchOrderCount();
         } catch (error: any) {
-          message.error(
-            error?.response?.data?.message ||
-              "Thêm vào giỏ hàng thất bại. Vui lòng thử lại.",
-          );
+          const status = error?.response?.status;
+          if (status === 401 || status === 403) {
+            message.warning("Vui lòng đăng nhập để thêm sản phẩm vào giỏ hàng.");
+          } else {
+            message.error(
+              error?.response?.data?.message ||
+                "Thêm vào giỏ hàng thất bại. Vui lòng thử lại.",
+            );
+          }
         } finally {
           addingToCartRef.current = false;
           setAddingToCart(false);
